@@ -11,14 +11,14 @@ from langchain_community.utilities import SQLDatabase
 from langchain_community.llms import Ollama
 
 # Set the Streamlit page configuration
-st.set_page_config(page_title="AI Tools", page_icon=":speech_balloon:")
+st.set_page_config(page_title="LLM Tools", page_icon=":speech_balloon:")
 
 # Load model configurations from environment variables
 MODEL_NAME = os.getenv('MODEL_NAME', 'llama3:instruct')
 MODEL_BASE_URL = os.getenv('MODEL_BASE_URL', 'http://model:11434')
 
 # Sidebar for mode selection
-st.sidebar.title("Different Modes")
+st.sidebar.title("Different Chats")
 page = st.sidebar.radio("Go to", ["Database Mode", "General Mode"])
 
 # Sidebar inputs for database connection, only shown in Database Mode
@@ -90,23 +90,53 @@ def get_sql_chain(db: SQLDatabase):
     template = """
     You are a data analyst at a company. You are interacting with a user who is asking you questions about the company's database.
     Based on the table schema below, write a SQL query that would answer the user's question. Take the conversation history into account.
-
+    
     <SCHEMA>{schema}</SCHEMA>
-
+    
     Conversation History: {chat_history}
-
-    Write only the SQL query and nothing else. Do not wrap the SQL query in any other text, not even backticks.
-    Do not reply to the user, and only respond with SQL queries.
-
-    For example:
-    Question: which 3 genres have the most tracks?
-    SQL Query: SELECT GenreId, COUNT(*) as track_count FROM "Track" GROUP BY GenreId ORDER BY track_count DESC LIMIT 3;
-
+    
+    ### Instructions:
+    1. **Use UTC Timing**: Always use UTC timing for any date or time calculations.
+    2. **Epoch Conversion**: Convert epoch timestamps to UTC timing if necessary.
+    3. **No UNION or JOINs**: Avoid using UNION and JOIN operations in your queries.
+    4. **Row Limit**: Ensure that the result set is limited to a maximum of 100,000 rows.
+    
+    ### Examples:
+    
+    - **Example 1**
+        - Question: Which 3 genres have the most tracks?
+        - SQL Query: `SELECT GenreId, COUNT(*) as track_count FROM "Track" GROUP BY GenreId ORDER BY track_count DESC LIMIT 3;`
+    
+    - **Example 2**
+        - Question: Name 10 playlists.
+        - SQL Query: `SELECT "Name" FROM "Playlist" LIMIT 10;`
+    
+    - **Example 3**
+        - Question: What are the 5 most recent invoices in UTC?
+        - SQL Query: `SELECT * FROM "Invoice" ORDER BY "InvoiceDate" AT TIME ZONE 'UTC' DESC LIMIT 5;`
+    
+    - **Example 4**
+        - Question: List all customers who signed up after 1609459200 epoch time in UTC.
+        - SQL Query: `SELECT "CustomerId", "FirstName", "LastName", "Email" FROM "Customer" WHERE "SignUpDate" >= to_timestamp(1609459200) AT TIME ZONE 'UTC';`
+    
+    - **Example 5**
+        - Question: How many tracks are longer than 5 minutes?
+        - SQL Query: `SELECT COUNT(*) FROM "Track" WHERE "Milliseconds" > 300000;`
+    
+    - **Example 6**
+        - Question: Get the first 100,000 rows from the track details.
+        - SQL Query: `SELECT * FROM "Track" LIMIT 100000;`
+    
+    - **Example 7**
+        - Question: Show the total sales for each customer without using joins.
+        - SQL Query: `SELECT "CustomerId", "FirstName", "LastName", (SELECT SUM("Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" LIMIT 100000;`
+    
     Your turn:
-
+    
     Question: {question}
     SQL Query:
     """
+
     prompt = ChatPromptTemplate.from_template(template)
     llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
 
@@ -127,6 +157,7 @@ def get_response(user_query: str, db: SQLDatabase, chat_history: list):
     template = """
     You are a data analyst at a company. You are interacting with a user who is asking you questions about the company's database.
     Based on the table schema below, question, sql query, and sql response, write a natural language response.
+    
     <SCHEMA>{schema}</SCHEMA>
 
     Conversation History: {chat_history}
