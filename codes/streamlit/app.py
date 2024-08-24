@@ -106,6 +106,38 @@ def get_sql_chain(db: SQLDatabase):
     Do not reply to the user, and only respond with SQL queries.
     
     For example:
+    
+    Question: which 3 genres have the most tracks?
+    SQL Query: SELECT GenreId, COUNT(*) as track_count FROM "Track" GROUP BY GenreId ORDER BY track_count DESC LIMIT 3;
+
+    Question: Name 10 playlists.
+    SQL Query: SELECT "Name" FROM "Playlist" LIMIT 10;
+
+    Question: What are the 5 most recent invoices?
+    SQL Query: SELECT * FROM "Invoice" ORDER BY "InvoiceDate" DESC LIMIT 5;
+
+    Question: List the names and titles of employees and their managers.
+    SQL Query: SELECT e1."FirstName" AS EmployeeFirstName, e1."LastName" AS EmployeeLastName, e1."Title" AS EmployeeTitle, e2."FirstName" AS ManagerFirstName, e2."LastName" AS ManagerLastName, e2."Title" AS ManagerTitle FROM "Employee" e1 LEFT JOIN "Employee" e2 ON e1."ReportsTo" = e2."EmployeeId";
+
+    Question: What is the average unit price of tracks by genre?
+    SQL Query: SELECT g."Name" AS GenreName, AVG(t."UnitPrice") AS AverageUnitPrice FROM "Track" t JOIN "Genre" g ON t."GenreId" = g."GenreId" GROUP BY g."Name" ORDER BY AverageUnitPrice DESC;
+
+    Question: How many albums does each artist have?
+    SQL Query: SELECT a."ArtistId", a."Name" AS ArtistName, COUNT(al."AlbumId") AS AlbumCount FROM "Artist" a JOIN "Album" al ON a."ArtistId" = al."ArtistId" GROUP BY a."ArtistId", a."Name" ORDER BY AlbumCount DESC;
+
+    Question: List all customers from Canada.
+    SQL Query: SELECT "CustomerId", "FirstName", "LastName", "Email" FROM "Customer" WHERE "Country" = 'Canada';
+
+    Question: What is the total sales for each customer?
+    SQL Query: SELECT c."CustomerId", c."FirstName", c."LastName", SUM(i."Total") AS TotalSales FROM "Customer" c JOIN "Invoice" i ON c."CustomerId" = i."CustomerId" GROUP BY c."CustomerId", c."FirstName", c."LastName" ORDER BY TotalSales DESC;
+
+    Question: List the names of tracks that are longer than 5 minutes.
+    SQL Query: SELECT "Name" FROM "Track" WHERE "Milliseconds" > 300000;
+
+    Question: List the titles of albums by AC/DC.
+    SQL Query: SELECT al."Title" FROM "Album" al JOIN "Artist" a ON al."ArtistId" = a."ArtistId" WHERE a."Name" = 'AC/DC';
+
+    
     Question: Which 3 genres have the most tracks?
     SQL Query: SELECT "Genre"."GenreId", COUNT(*) as track_count FROM "Track" GROUP BY "Genre"."GenreId" ORDER BY track_count DESC LIMIT 3;
     
