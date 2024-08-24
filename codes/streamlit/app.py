@@ -263,15 +263,15 @@ def main():
                 st.error(f"Error: {e}")
 
         st.subheader("Manual SQL Command Execution")
-            sql_query = st.text_area("Enter SQL query:", height=100)
-            if st.button("Run SQL Command"):
-                try:
-                    with engine.connect() as connection:
-                        result = connection.execute(sql_query)
-                        df = pd.DataFrame(result.fetchall(), columns=result.keys())
-                        st.dataframe(df)  # Display the result as a dataframe
-                except Exception as e:
-                    st.error(f"Error executing SQL query: {e}")
+        sql_query = st.text_area("Enter SQL query:", height=100)
+        if st.button("Run SQL Command"):
+            try:
+                with engine.connect() as connection:
+                    result = connection.execute(sql_query)
+                    df = pd.DataFrame(result.fetchall(), columns=result.keys())
+                    st.dataframe(df)  # Display the result as a dataframe
+            except Exception as e:
+                st.error(f"Error executing SQL query: {e}")
 
         # Initialize chat history in session state if not already done
         if "chat_history" not in st.session_state:
