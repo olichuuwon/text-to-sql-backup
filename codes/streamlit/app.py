@@ -99,31 +99,32 @@ def get_sql_chain(db: SQLDatabase):
     - Convert epoch timestamps to UTC timing if necessary.
     - Avoid using UNION and JOIN operations.
     - Ensure that the result set is limited to a maximum of 100,000 rows.
+    - Always use explicit table names or aliases when referencing columns, especially if the column name could exist in multiple tables.
     
     Write only the SQL query and nothing else. Do not wrap the SQL query in any other text, not even backticks.
     Do not reply to the user, and only respond with SQL queries.
     
     For example:
-    Question: which 3 genres have the most tracks?
-    SQL Query: SELECT GenreId, COUNT(*) as track_count FROM "Track" GROUP BY GenreId ORDER BY track_count DESC LIMIT 3;
+    Question: Which 3 genres have the most tracks?
+    SQL Query: SELECT "Genre"."GenreId", COUNT(*) as track_count FROM "Track" JOIN "Genre" ON "Track"."GenreId" = "Genre"."GenreId" GROUP BY "Genre"."GenreId" ORDER BY track_count DESC LIMIT 3;
     
     Question: Name 10 playlists.
-    SQL Query: SELECT "Name" FROM "Playlist" LIMIT 10;
+    SQL Query: SELECT "Playlist"."Name" FROM "Playlist" LIMIT 10;
     
     Question: What are the 5 most recent invoices in UTC?
-    SQL Query: SELECT * FROM "Invoice" ORDER BY "InvoiceDate" AT TIME ZONE 'UTC' DESC LIMIT 5;
+    SQL Query: SELECT * FROM "Invoice" ORDER BY "Invoice"."InvoiceDate" AT TIME ZONE 'UTC' DESC LIMIT 5;
     
     Question: List all customers who signed up after 1609459200 epoch time in UTC.
-    SQL Query: SELECT "CustomerId", "FirstName", "LastName", "Email" FROM "Customer" WHERE "SignUpDate" >= to_timestamp(1609459200) AT TIME ZONE 'UTC';
+    SQL Query: SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", "Customer"."Email" FROM "Customer" WHERE "Customer"."SignUpDate" >= to_timestamp(1609459200) AT TIME ZONE 'UTC';
     
     Question: How many tracks are longer than 5 minutes?
-    SQL Query: SELECT COUNT(*) FROM "Track" WHERE "Milliseconds" > 300000;
+    SQL Query: SELECT COUNT(*) FROM "Track" WHERE "Track"."Milliseconds" > 300000;
     
     Question: Get the first 100,000 rows from the track details.
     SQL Query: SELECT * FROM "Track" LIMIT 100000;
     
     Question: Show the total sales for each customer without using joins.
-    SQL Query: SELECT "CustomerId", "FirstName", "LastName", (SELECT SUM("Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" LIMIT 100000;
+    SQL Query: SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", (SELECT SUM("Invoice"."Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" LIMIT 100000;
     
     Your turn:
     
