@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 import pandas as pd
 from prettytable import PrettyTable
 from langchain_core.messages import AIMessage, HumanMessage
@@ -262,16 +262,19 @@ def main():
             except Exception as e:
                 st.error(f"Error: {e}")
 
-        st.subheader("Manual SQL Command Execution")
-        sql_query = st.text_area("Enter SQL query:", height=100)
-        if st.button("Run SQL Command"):
-            try:
-                with engine.connect() as connection:
-                    result = connection.execute(sql_query)
-                    df = pd.DataFrame(result.fetchall(), columns=result.keys())
-                    st.dataframe(df)  # Display the result as a dataframe
-            except Exception as e:
-                st.error(f"Error executing SQL query: {e}")
+        # Manual SQL Command Execution in the sidebar
+        with st.sidebar.expander("Manual SQL Command Execution"):
+            st.subheader("Manual SQL Command Execution")
+            sql_query = st.text_area("Enter SQL query:", height=100, key="sql_query_sidebar")
+            if st.button("Run SQL Command", key="run_sql_sidebar"):
+                try:
+                    with engine.connect() as connection:
+                        result = connection.execute(text(sql_query))  # Wrap query with text()
+                        df = pd.DataFrame(result.fetchall(), columns=result.keys())
+                        st.write("Query Result:")
+                        st.dataframe(df)  # Display the result as a dataframe
+                except Exception as e:
+                    st.error(f"Error executing SQL query: {e}")
 
         # Initialize chat history in session state if not already done
         if "chat_history" not in st.session_state:
