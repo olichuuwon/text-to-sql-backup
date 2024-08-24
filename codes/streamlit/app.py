@@ -97,7 +97,7 @@ def get_sql_chain(db: SQLDatabase):
     
     - Always use UTC timing for any date or time calculations.
     - Convert epoch timestamps to UTC timing if necessary.
-    - Avoid using UNION and JOIN operations.
+    - Avoid using UNION and JOIN operations where possible, but use JOIN if necessary to correctly reference and relate tables.
     - Ensure that the result set is limited to a maximum of 100,000 rows.
     - Always use explicit table names or aliases when referencing columns, especially if the column name could exist in multiple tables.
     - Do not use CROSS APPLY or any constructs that are not supported by PostgreSQL.
