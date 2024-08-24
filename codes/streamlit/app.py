@@ -100,13 +100,14 @@ def get_sql_chain(db: SQLDatabase):
     - Avoid using UNION and JOIN operations.
     - Ensure that the result set is limited to a maximum of 100,000 rows.
     - Always use explicit table names or aliases when referencing columns, especially if the column name could exist in multiple tables.
+    - Do not use CROSS APPLY or any constructs that are not supported by PostgreSQL.
     
     Write only the SQL query and nothing else. Do not wrap the SQL query in any other text, not even backticks.
     Do not reply to the user, and only respond with SQL queries.
     
     For example:
     Question: Which 3 genres have the most tracks?
-    SQL Query: SELECT "Genre"."GenreId", COUNT(*) as track_count FROM "Track" JOIN "Genre" ON "Track"."GenreId" = "Genre"."GenreId" GROUP BY "Genre"."GenreId" ORDER BY track_count DESC LIMIT 3;
+    SQL Query: SELECT "Genre"."GenreId", COUNT(*) as track_count FROM "Track" GROUP BY "Genre"."GenreId" ORDER BY track_count DESC LIMIT 3;
     
     Question: Name 10 playlists.
     SQL Query: SELECT "Playlist"."Name" FROM "Playlist" LIMIT 10;
