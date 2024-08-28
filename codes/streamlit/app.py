@@ -1,4 +1,5 @@
 import os
+import re
 import streamlit as st
 from sqlalchemy import create_engine, inspect, text
 import pandas as pd
@@ -52,6 +53,8 @@ if page == "Database Mode":
                 st.session_state.db = SQLDatabase.from_uri(st.session_state.db_uri)  # Initialize database connection
         except Exception as e:
             st.sidebar.error(f"Failed to connect to database: {e}")
+    
+    
 
 # Function to get table schema
 def get_table_schema(engine, table_name: str) -> PrettyTable:
@@ -78,12 +81,13 @@ def get_sample_data(engine, table_name: str, sample_size: int = 1) -> PrettyTabl
 def display_table_info(db_uri: str, sample_size: int = 1) -> None:
     engine = create_engine(db_uri)
     inspector = inspect(engine)
-    for table_name in inspector.get_table_names():
-        st.write(f"**Table: {table_name}**")
-        st.write("Schema:")
-        st.write(get_table_schema(engine, table_name))
-        st.write("Sample Data:")
-        st.write(get_sample_data(engine, table_name, sample_size))
+    with st.expander("View Database Schema"):
+        for table_name in inspector.get_table_names():
+            st.write(f"**Table: {table_name}**")
+            st.write("Schema:")
+            st.write(get_table_schema(engine, table_name))
+            st.write("Sample Data:")
+            st.write(get_sample_data(engine, table_name, sample_size))
 
 # Function to get SQL query chain
 def get_sql_chain(db: SQLDatabase):
@@ -102,13 +106,14 @@ def get_sql_chain(db: SQLDatabase):
     - Always use explicit table names or aliases when referencing columns, especially if the column name could exist in multiple tables.
     - Do not use CROSS APPLY or any constructs that are not supported by PostgreSQL.
     
-    Write only the SQL query and nothing else. Do not wrap the SQL query in any other text, not even backticks.
+    Write only the SQL query and nothing else. 
+    Do not wrap the SQL query in any other text, not even backticks.
     Do not reply to the user, and only respond with SQL queries.
     
     For example:
-    
-    Question: which 3 genres have the most tracks?
-    SQL Query: SELECT GenreId, COUNT(*) as track_count FROM "Track" GROUP BY GenreId ORDER BY track_count DESC LIMIT 3;
+
+    Question: Which 3 genres have the most tracks?
+    SQL Query: SELECT g."Name" AS GenreName, COUNT(*) AS track_count FROM "Track" t JOIN "Genre" g ON t."GenreId" = g."GenreId" GROUP BY g."Name" ORDER BY track_count DESC LIMIT 3;
 
     Question: Name 10 playlists.
     SQL Query: SELECT "Name" FROM "Playlist" LIMIT 10;
@@ -137,28 +142,38 @@ def get_sql_chain(db: SQLDatabase):
     Question: List the titles of albums by AC/DC.
     SQL Query: SELECT al."Title" FROM "Album" al JOIN "Artist" a ON al."ArtistId" = a."ArtistId" WHERE a."Name" = 'AC/DC';
 
-    
-    Question: Which 3 genres have the most tracks?
-    SQL Query: SELECT "Genre"."GenreId", COUNT(*) as track_count FROM "Track" GROUP BY "Genre"."GenreId" ORDER BY track_count DESC LIMIT 3;
-    
-    Question: Name 10 playlists.
-    SQL Query: SELECT "Playlist"."Name" FROM "Playlist" LIMIT 10;
-    
     Question: What are the 5 most recent invoices in UTC?
-    SQL Query: SELECT * FROM "Invoice" ORDER BY "Invoice"."InvoiceDate" AT TIME ZONE 'UTC' DESC LIMIT 5;
-    
-    Question: List all customers who signed up after 1609459200 epoch time in UTC.
-    SQL Query: SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", "Customer"."Email" FROM "Customer" WHERE "Customer"."SignUpDate" >= to_timestamp(1609459200) AT TIME ZONE 'UTC';
-    
+    SQL Query: SELECT * FROM "Invoice" ORDER BY "InvoiceDate" AT TIME ZONE 'UTC' DESC LIMIT 5;
+
     Question: How many tracks are longer than 5 minutes?
-    SQL Query: SELECT COUNT(*) FROM "Track" WHERE "Track"."Milliseconds" > 300000;
-    
+    SQL Query: SELECT COUNT(*) FROM "Track" WHERE "Milliseconds" > 300000;
+
     Question: Get the first 100,000 rows from the track details.
     SQL Query: SELECT * FROM "Track" LIMIT 100000;
-    
+
     Question: Show the total sales for each customer without using joins.
     SQL Query: SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", (SELECT SUM("Invoice"."Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" LIMIT 100000;
-    
+
+    Question: What is the total number of tracks in each media type?
+    SQL Query: SELECT m."Name" AS MediaTypeName, COUNT(t."TrackId") AS TrackCount FROM "Track" t JOIN "MediaType" m ON t."MediaTypeId" = m."MediaTypeId" GROUP BY m."Name" ORDER BY TrackCount DESC;
+
+    Question: List all artists who have more than 5 albums.
+    SQL Query: SELECT a."Name" AS ArtistName, COUNT(al."AlbumId") AS AlbumCount FROM "Artist" a JOIN "Album" al ON a."ArtistId" = al."ArtistId" GROUP BY a."Name" HAVING COUNT(al."AlbumId") > 5;
+
+    Question: What are the most popular playlists (with the most tracks)?
+    SQL Query: SELECT p."Name" AS PlaylistName, COUNT(pt."TrackId") AS TrackCount FROM "Playlist" p JOIN "PlaylistTrack" pt ON p."PlaylistId" = pt."PlaylistId" GROUP BY p."Name" ORDER BY TrackCount DESC;
+
+    Question: Find the average number of tracks per album.
+    SQL Query: SELECT AVG(TrackCount) AS AvgTracksPerAlbum FROM (SELECT COUNT(*) AS TrackCount FROM "Track" GROUP BY "AlbumId") AS AlbumTracks;
+
+    Question: List all customers who have never made a purchase.
+    SQL Query: SELECT "CustomerId", "FirstName", "LastName", "Email" FROM "Customer" WHERE "CustomerId" NOT IN (SELECT DISTINCT "CustomerId" FROM "Invoice");
+
+    Once again remember:
+    Write only the SQL query and nothing else. 
+    Do not wrap the SQL query in any other text, not even backticks.
+    Do not reply to the user, and only respond with SQL queries.
+
     Your turn:
     
     Question: {question}
@@ -177,6 +192,10 @@ def get_sql_chain(db: SQLDatabase):
         | llm
         | StrOutputParser()
     )
+
+def log_and_execute_sql(query, db):
+    print(query)
+    return db.run(query)  # Execute the SQL query
 
 # Function to generate a response
 def get_response(user_query: str, db: SQLDatabase, chat_history: list):
@@ -199,7 +218,7 @@ def get_response(user_query: str, db: SQLDatabase, chat_history: list):
     chain = (
         RunnablePassthrough.assign(query=sql_chain).assign(
             schema=lambda _: db.get_table_info(),
-            response=lambda vars: print(vars["query"]) or db.run(vars["query"]),
+            response=lambda vars: log_and_execute_sql(vars["query"], db),
         )
         | prompt
         | llm
@@ -249,10 +268,48 @@ def llama_page():
 
         st.session_state.llama_chat_history.append(AIMessage(content=response))
 
+# Function to validate SQL query
+def is_safe_query(sql_query):
+    # Remove leading/trailing whitespace
+    stripped_query = sql_query.strip()
+
+    # Split the query by semicolon and take the first part
+    first_part = stripped_query.split(';', 1)[0].strip()
+
+    # Check if the first part starts with "SELECT"
+    if not re.match(r'^select\s+', first_part, re.IGNORECASE):
+        return False
+
+    # Check for an even number of single quotes (') and double quotes (")
+    if first_part.count("'") % 2 != 0 or first_part.count('"') % 2 != 0:
+        return False
+
+    # Additional validation on the first statement
+    if '--' in first_part or '#' in first_part:
+        return False
+
+    if '/*' in first_part or '*/' in first_part:
+        return False
+
+    if re.search(r'\bunion\b', first_part, re.IGNORECASE):
+        return False
+
+    # Check for forbidden keywords in the first statement
+    forbidden_keywords = ['drop', 'insert', 'update', 'delete', 'create', 'alter', 'truncate', 'exec', 'execute', 'xp_cmdshell']
+    for keyword in forbidden_keywords:
+        if re.search(r'\b' + keyword + r'\b', first_part, re.IGNORECASE):
+            return False
+
+    return True
+
 # Main function to run the Streamlit app
 def main():
     if page == "Database Mode":
+        # Check the state of 'db' and set is_disabled accordingly
+        is_disabled = st.session_state.db is None
+
         st.title("Database Mode")
+        st.caption(f"Database {'Connected' if st.session_state.db else 'Not Connected'}")
 
         # Attempt to connect to the database only if the Connect button has been used
         if st.session_state.db is not None:
@@ -263,18 +320,28 @@ def main():
                 st.error(f"Error: {e}")
 
         # Manual SQL Command Execution in the sidebar
-        with st.sidebar.expander("Manual SQL Command Execution"):
-            st.subheader("Manual SQL Command Execution")
-            sql_query = st.text_area("Enter SQL query:", height=100, key="sql_query_sidebar")
-            if st.button("Run SQL Command", key="run_sql_sidebar"):
-                try:
-                    with engine.connect() as connection:
-                        result = connection.execute(text(sql_query))  # Wrap query with text()
-                        df = pd.DataFrame(result.fetchall(), columns=result.keys())
-                        st.write("Query Result:")
-                        st.dataframe(df)  # Display the result as a dataframe
-                except Exception as e:
-                    st.error(f"Error executing SQL query: {e}")
+        with st.sidebar:
+            st.title("Manual SQL Command Execution")
+            with st.sidebar.expander("Examples"):
+                st.caption("Name 10 tracks.")
+                st.code('SELECT * FROM "Track" LIMIT 10;', language="sql", line_numbers=False)
+                st.caption("Show the total sales for each customer without using joins.")
+                st.code('SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", (SELECT SUM("Invoice"."Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" ORDER BY TotalSales DESC LIMIT 50;', language="sql", line_numbers=False)
+            sql_query = st.text_area("Enter SQL query:", height=100, key="sql_query_sidebar", disabled=is_disabled)
+            if st.button("Run SQL Command", key="run_sql_sidebar", disabled=is_disabled):
+                # Consider only the first part of the query (up to the first semicolon)
+                if is_safe_query(sql_query):
+                    try:
+                        first_part = sql_query.split(';', 1)[0].strip()
+                        with engine.connect() as connection:
+                            result = connection.execute(text(first_part))  # Wrap query with text()
+                            df = pd.DataFrame(result.fetchall(), columns=result.keys())
+                            st.write("Query Result:")
+                            st.dataframe(df)  # Display the result as a dataframe
+                    except Exception as e:
+                        st.error(f"Error executing SQL query: {e}")
+                else:
+                    st.error("Only single SELECT statements without harmful keywords or characters are allowed.")
 
         # Initialize chat history in session state if not already done
         if "chat_history" not in st.session_state:
@@ -282,17 +349,18 @@ def main():
                 AIMessage(content="Hello! Feel free to ask me anything about your database."),
             ]
 
-        # Display chat history
-        for message in st.session_state.chat_history:
-            if isinstance(message, AIMessage):
-                with st.chat_message("AI"):
-                    st.markdown(message.content)
-            elif isinstance(message, HumanMessage):
-                with st.chat_message("Human"):
-                    st.markdown(message.content)
+        if st.session_state.db is not None:
+            # Display chat history
+            for message in st.session_state.chat_history:
+                if isinstance(message, AIMessage):
+                    with st.chat_message("AI"):
+                        st.markdown(message.content)
+                elif isinstance(message, HumanMessage):
+                    with st.chat_message("Human"):
+                        st.markdown(message.content)
 
         # Input for user query
-        user_query = st.chat_input("Type a message...")
+        user_query = st.chat_input("Type a message...", disabled=is_disabled)
         if user_query is not None and user_query.strip() != "":
             st.session_state.chat_history.append(HumanMessage(content=user_query))
 

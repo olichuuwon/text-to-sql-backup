@@ -16,5 +16,8 @@ COPY app.py /app/
 # Expose the required port
 EXPOSE 8501
 
+# Set env
+ENV PYTHONUNBUFFERED=1
+
 # Define the entrypoint to run the Streamlit application
 ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
