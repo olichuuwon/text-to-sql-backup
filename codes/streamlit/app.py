@@ -222,7 +222,7 @@ def get_sql_chain(db: SQLDatabase):
     )
 
 # Function to get Natural Language Response Chain
-def get_natural_language_chain():
+def get_natural_language_chain(db: SQLDatabase):
     template = """
     You are a data analyst at a company. You have been provided with a SQL query and its result.
     Based on this information, generate a human-readable response. Take the conversation history into account.
