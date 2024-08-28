@@ -16,8 +16,8 @@ spec:
       containers:
       - name: streamlit-app
         image: jieshilyn/streamlit-app
-        env:
-          - name: DB_HOST
-            value: "postgres"
+        # env:
+        #   - name: DB_HOST
+        #     value: "postgres"
         ports:
           - containerPort: 8501
