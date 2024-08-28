@@ -243,30 +243,29 @@ def get_natural_language_chain():
 
 # Function to execute and combine chains
 def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
-    with st.spinner("waiting"):
-        # First, run the SQL generation chain
-        sql_chain = get_sql_chain(db)
-        sql_query = sql_chain.invoke({
-            "question": user_query,
-            "chat_history": chat_history
-        })
+    # First, run the SQL generation chain
+    sql_chain = get_sql_chain(db)
+    sql_query = sql_chain.invoke({
+        "question": user_query,
+        "chat_history": chat_history
+    })
 
-        # Execute the SQL query
-        engine = create_engine(st.session_state.db_uri)
-        with engine.connect() as connection:
-            result_df = pd.read_sql(sql_query, connection)
+    # Execute the SQL query
+    engine = create_engine(st.session_state.db_uri)
+    with engine.connect() as connection:
+        result_df = pd.read_sql(sql_query, connection)
 
-        # Prepare SQL response in a suitable format
-        sql_response = result_df  # You may adjust this format based on your needs
+    # Prepare SQL response in a suitable format
+    sql_response = result_df  # You may adjust this format based on your needs
 
-        # Then, run the Natural Language chain
-        nl_chain = get_natural_language_chain()
-        natural_language_response = nl_chain.stream({
-            "query": sql_query,
-            "response": sql_response
-        })
+    # Then, run the Natural Language chain
+    nl_chain = get_natural_language_chain()
+    natural_language_response = nl_chain.invoke({
+        "query": sql_query,
+        "response": sql_response
+    })
 
-        return sql_query, sql_response, natural_language_response
+    return sql_query, sql_response, natural_language_response
 
 # Function to validate SQL query
 def is_safe_query(sql_query):
@@ -394,7 +393,7 @@ def main():
                         content_pack = [sql_query, sql_response, natural_language_response]
                         st.code(sql_query)
                         st.dataframe(sql_response)
-                        st.write_stream(natural_language_response)
+                        st.write(natural_language_response)
                         st.session_state.chat_history.append(AIMessage(content=content_pack))
                     else:
                         st.error("Please connect to the database first.")
