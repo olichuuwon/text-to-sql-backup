@@ -225,7 +225,11 @@ def get_sql_chain(db: SQLDatabase):
 def get_natural_language_chain():
     template = """
     You are a data analyst at a company. You have been provided with a SQL query and its result.
-    Based on this information, generate a human-readable response.
+    Based on this information, generate a human-readable response. Take the conversation history into account.
+    
+    <SCHEMA>{schema}</SCHEMA>
+    
+    Conversation History: {chat_history}
     
     SQL Query: <SQL>{query}</SQL>
     SQL Response: {response}
@@ -235,8 +239,12 @@ def get_natural_language_chain():
     prompt = ChatPromptTemplate.from_template(template)
     llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
 
+    def get_schema(_):
+        return db.get_table_info()
+
     return (
-        prompt
+        RunnablePassthrough.assign(schema=get_schema)
+        | prompt
         | llm
         | StrOutputParser()
     )
