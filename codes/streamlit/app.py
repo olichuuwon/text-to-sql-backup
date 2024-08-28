@@ -270,7 +270,8 @@ def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
     nl_chain = get_natural_language_chain(db)
     natural_language_response = nl_chain.invoke({
         "query": sql_query,
-        "response": sql_response
+        "response": sql_response,
+        "chat_history": chat_history
     })
 
     return sql_query, sql_response, natural_language_response
