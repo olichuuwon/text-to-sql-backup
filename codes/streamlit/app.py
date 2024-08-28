@@ -19,13 +19,13 @@ MODEL_NAME = os.getenv('MODEL_NAME', 'llama3:instruct')
 MODEL_BASE_URL = os.getenv('MODEL_BASE_URL', 'http://model:11434')
 
 # Sidebar for mode selection
-st.sidebar.title("Different Chats")
-page = st.sidebar.radio("Go to", ["Database Mode", "General Mode"])
+st.sidebar.title("LLM Tools")
+page = st.sidebar.selectbox("Select Mode", ["Database Mode", "General Mode"])
 
 # Sidebar inputs for database connection, only shown in Database Mode
 if page == "Database Mode":
     st.sidebar.title("Database Connection Settings")
-    db_host = st.sidebar.text_input("Host", value=os.getenv('DB_HOST', 'localhost'))
+    db_host = st.sidebar.text_input("Host", value=os.getenv('DB_HOST', 'postgres'))
     db_port = st.sidebar.text_input("Port", value=os.getenv('DB_PORT', '5432'))
     db_user = st.sidebar.text_input("User", value=os.getenv('DB_USER', 'user'))
     db_password = st.sidebar.text_input("Password", value=os.getenv('DB_PASSWORD', 'pass'), type="password")
@@ -53,8 +53,6 @@ if page == "Database Mode":
                 st.session_state.db = SQLDatabase.from_uri(st.session_state.db_uri)  # Initialize database connection
         except Exception as e:
             st.sidebar.error(f"Failed to connect to database: {e}")
-    
-    
 
 # Function to get table schema
 def get_table_schema(engine, table_name: str) -> PrettyTable:
@@ -78,7 +76,7 @@ def get_sample_data(engine, table_name: str, sample_size: int = 1) -> PrettyTabl
     return sample_data_table
 
 # Function to display table information
-def display_table_info(db_uri: str, sample_size: int = 1) -> None:
+def display_table_schema(db_uri: str, sample_size: int = 1) -> None:
     engine = create_engine(db_uri)
     inspector = inspect(engine)
     with st.expander("View Database Schema"):
@@ -89,27 +87,57 @@ def display_table_info(db_uri: str, sample_size: int = 1) -> None:
             st.write("Sample Data:")
             st.write(get_sample_data(engine, table_name, sample_size))
 
+# Manual SQL Command Execution in the sidebar
+def display_sql_execution(db_uri: str) -> None:
+    engine = create_engine(db_uri)
+    with st.expander("Run Statements Manually"):
+        st.caption("Name 10 tracks.")
+        st.code('SELECT * FROM "Track" LIMIT 10;', language="sql", line_numbers=False)
+        st.caption("List of the top 50 customers based on their total sales, ordered in descending order.")
+        st.code('SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", (SELECT SUM("Invoice"."Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" ORDER BY TotalSales DESC LIMIT 50;', language="sql", line_numbers=False)
+        sql_query = st.text_area("Enter SQL query:", height=100, key="sql_query_sidebar")
+        if st.button("Fetch", key="run_sql_sidebar"):
+            # Consider only the first part of the query (up to the first semicolon)
+            if is_safe_query(sql_query):
+                try:
+                    first_part = sql_query.split(';', 1)[0].strip()
+                    with engine.connect() as connection:
+                        result = connection.execute(text(first_part))  # Wrap query with text()
+                        df = pd.DataFrame(result.fetchall(), columns=result.keys())
+                        st.write("Query Result:")
+                        st.dataframe(df)  # Display the result as a dataframe
+                except Exception as e:
+                    st.error(f"Error executing SQL query: {e}")
+            else:
+                st.error("Only single SELECT statements without harmful keywords or characters are allowed.")
+
+
 # Function to get SQL query chain
 def get_sql_chain(db: SQLDatabase):
     template = """
     You are a data analyst at a company. You are interacting with a user who is asking you questions about the company's database.
-    Based on the table schema below, write a SQL query that would answer the user's question. Take the conversation history into account.
+    Based on the table schema below, write a PostgresSQL query that would answer the user's question. Take the conversation history into account.
     
     <SCHEMA>{schema}</SCHEMA>
     
     Conversation History: {chat_history}
     
-    - Always use UTC timing for any date or time calculations.
+    Instructions:
+    - Use UTC timing for any date or time calculations.
     - Convert epoch timestamps to UTC timing if necessary.
-    - Avoid using UNION and JOIN operations where possible, but use JOIN if necessary to correctly reference and relate tables.
-    - Ensure that the result set is limited to a maximum of 100,000 rows.
-    - Always use explicit table names or aliases when referencing columns, especially if the column name could exist in multiple tables.
-    - Do not use CROSS APPLY or any constructs that are not supported by PostgreSQL.
-    
-    Write only the SQL query and nothing else. 
+    - Prioritize the use of SELECT statements with explicit column names; use "*" only when all columns are required.
+    - Use JOIN operations judiciously to ensure data integrity when multiple tables are referenced. Avoid UNION unless absolutely necessary.
+    - Limit the result set to a maximum of 100,000 rows to prevent large data returns.
+    - Always use explicit table names or aliases when referencing columns to prevent ambiguity, especially if the column name exists in multiple tables.
+    - Avoid using constructs not supported by PostgreSQL, such as CROSS APPLY.
+    - Handle null values and ensure to include conditions that maintain data integrity in joins and filters.
+    - Ensure that aggregation functions (e.g., COUNT, SUM, AVG) are used with GROUP BY clauses when necessary.
+    - The syntax for the random function in PostgreSQL is: random()
+
+    Write only the SQL query and nothing else.
     Do not wrap the SQL query in any other text, not even backticks.
     Do not reply to the user, and only respond with SQL queries.
-    
+
     For example:
 
     Question: Which 3 genres have the most tracks?
@@ -170,7 +198,7 @@ def get_sql_chain(db: SQLDatabase):
     SQL Query: SELECT "CustomerId", "FirstName", "LastName", "Email" FROM "Customer" WHERE "CustomerId" NOT IN (SELECT DISTINCT "CustomerId" FROM "Invoice");
 
     Once again remember:
-    Write only the SQL query and nothing else. 
+    Write only the SQL query and nothing else.
     Do not wrap the SQL query in any other text, not even backticks.
     Do not reply to the user, and only respond with SQL queries.
 
@@ -193,80 +221,51 @@ def get_sql_chain(db: SQLDatabase):
         | StrOutputParser()
     )
 
-def log_and_execute_sql(query, db):
-    print(query)
-    return db.run(query)  # Execute the SQL query
-
-# Function to generate a response
-def get_response(user_query: str, db: SQLDatabase, chat_history: list):
-    sql_chain = get_sql_chain(db)
-
+# Function to get Natural Language Response Chain
+def get_natural_language_chain():
     template = """
-    You are a data analyst at a company. You are interacting with a user who is asking you questions about the company's database.
-    Based on the table schema below, question, sql query, and sql response, write a natural language response.
+    You are a data analyst at a company. You have been provided with a SQL query and its result.
+    Based on this information, generate a human-readable response.
     
-    <SCHEMA>{schema}</SCHEMA>
-
-    Conversation History: {chat_history}
     SQL Query: <SQL>{query}</SQL>
-    User question: {question}
-    SQL Response: {response}"""
-
+    SQL Response: {response}
+    
+    Provide a summary of the SQL results in plain language for the user.
+    """
     prompt = ChatPromptTemplate.from_template(template)
     llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
 
-    chain = (
-        RunnablePassthrough.assign(query=sql_chain).assign(
-            schema=lambda _: db.get_table_info(),
-            response=lambda vars: log_and_execute_sql(vars["query"], db),
-        )
-        | prompt
+    return (
+        prompt
         | llm
         | StrOutputParser()
     )
 
-    result = chain.invoke({
+# Function to execute and combine chains
+def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
+    # First, run the SQL generation chain
+    sql_chain = get_sql_chain(db)
+    sql_query = sql_chain.invoke({
         "question": user_query,
-        "chat_history": chat_history,
+        "chat_history": chat_history
     })
 
-    print(f"Generated SQL Query: {result}")
+    # Execute the SQL query
+    engine = create_engine(st.session_state.db_uri)
+    with engine.connect() as connection:
+        result_df = pd.read_sql(sql_query, connection)
 
-    return result
+    # Prepare SQL response in a suitable format
+    sql_response = result_df  # You may adjust this format based on your needs
 
-# Function for the general chat page
-def llama_page():
-    st.title("General Mode")
+    # Then, run the Natural Language chain
+    nl_chain = get_natural_language_chain()
+    natural_language_response = nl_chain.invoke({
+        "query": sql_query,
+        "response": sql_response
+    })
 
-    # Initialize chat history in session state if not already done
-    if "llama_chat_history" not in st.session_state:
-        st.session_state.llama_chat_history = [
-            AIMessage(content="Hello! Feel free to ask me about anything."),
-        ]
-
-    # Display chat history
-    for message in st.session_state.llama_chat_history:
-        if isinstance(message, AIMessage):
-            with st.chat_message("AI"):
-                st.markdown(message.content)
-        elif isinstance(message, HumanMessage):
-            with st.chat_message("Human"):
-                st.markdown(message.content)
-
-    # Input for user query
-    user_query = st.chat_input("Type a message...")
-    if user_query is not None and user_query.strip() != "":
-        st.session_state.llama_chat_history.append(HumanMessage(content=user_query))
-
-        with st.chat_message("Human"):
-            st.markdown(user_query)
-
-        with st.chat_message("AI"):
-            llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
-            response = llm(user_query)
-            st.markdown(response)
-
-        st.session_state.llama_chat_history.append(AIMessage(content=response))
+    return sql_query, sql_response, natural_language_response
 
 # Function to validate SQL query
 def is_safe_query(sql_query):
@@ -302,9 +301,46 @@ def is_safe_query(sql_query):
 
     return True
 
+# Function for the general chat page
+def general_mode():
+    st.title("General Mode")
+
+    # Initialize chat history in session state if not already done
+    if "general_chat_history" not in st.session_state:
+        st.session_state.general_chat_history = [
+            AIMessage(content="Hello! Feel free to ask me about anything."),
+        ]
+
+    # Display chat history
+    for message in st.session_state.general_chat_history:
+        if isinstance(message, AIMessage):
+            with st.chat_message("AI"):
+                st.markdown(message.content)
+        elif isinstance(message, HumanMessage):
+            with st.chat_message("Human"):
+                st.markdown(message.content)
+
+    # Input for user query
+    user_query = st.chat_input("Type a message...")
+    if user_query is not None and user_query.strip() != "":
+        st.session_state.general_chat_history.append(HumanMessage(content=user_query))
+
+        with st.chat_message("Human"):
+            st.markdown(user_query)
+
+        with st.chat_message("AI"):
+            llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
+            response = llm(user_query)
+            st.markdown(response)
+
+        st.session_state.general_chat_history.append(AIMessage(content=response))
+
+
 # Main function to run the Streamlit app
 def main():
-    if page == "Database Mode":
+    if page == "General Mode":
+        general_mode()
+    elif page == "Database Mode":
         # Check the state of 'db' and set is_disabled accordingly
         is_disabled = st.session_state.db is None
 
@@ -315,33 +351,10 @@ def main():
         if st.session_state.db is not None:
             try:
                 engine = create_engine(st.session_state.db_uri)
-                display_table_info(st.session_state.db_uri)
+                display_table_schema(st.session_state.db_uri)
+                display_sql_execution(st.session_state.db_uri)
             except Exception as e:
                 st.error(f"Error: {e}")
-
-        # Manual SQL Command Execution in the sidebar
-        with st.sidebar:
-            st.title("Manual SQL Command Execution")
-            with st.sidebar.expander("Examples"):
-                st.caption("Name 10 tracks.")
-                st.code('SELECT * FROM "Track" LIMIT 10;', language="sql", line_numbers=False)
-                st.caption("Show the total sales for each customer without using joins.")
-                st.code('SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", (SELECT SUM("Invoice"."Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" ORDER BY TotalSales DESC LIMIT 50;', language="sql", line_numbers=False)
-            sql_query = st.text_area("Enter SQL query:", height=100, key="sql_query_sidebar", disabled=is_disabled)
-            if st.button("Run SQL Command", key="run_sql_sidebar", disabled=is_disabled):
-                # Consider only the first part of the query (up to the first semicolon)
-                if is_safe_query(sql_query):
-                    try:
-                        first_part = sql_query.split(';', 1)[0].strip()
-                        with engine.connect() as connection:
-                            result = connection.execute(text(first_part))  # Wrap query with text()
-                            df = pd.DataFrame(result.fetchall(), columns=result.keys())
-                            st.write("Query Result:")
-                            st.dataframe(df)  # Display the result as a dataframe
-                    except Exception as e:
-                        st.error(f"Error executing SQL query: {e}")
-                else:
-                    st.error("Only single SELECT statements without harmful keywords or characters are allowed.")
 
         # Initialize chat history in session state if not already done
         if "chat_history" not in st.session_state:
@@ -354,7 +367,13 @@ def main():
             for message in st.session_state.chat_history:
                 if isinstance(message, AIMessage):
                     with st.chat_message("AI"):
-                        st.markdown(message.content)
+                        if type(message.content) == str:
+                            st.markdown(message.content)
+                        else:
+                            sql_query, sql_response, natural_language_response = message.content
+                            st.code(sql_query)
+                            st.dataframe(sql_response)
+                            st.write(natural_language_response)
                 elif isinstance(message, HumanMessage):
                     with st.chat_message("Human"):
                         st.markdown(message.content)
@@ -370,16 +389,16 @@ def main():
             with st.chat_message("AI"):
                 try:
                     if st.session_state.db is not None:
-                        response = get_response(user_query, st.session_state.db, st.session_state.chat_history)
-                        st.markdown(response)
-                        st.session_state.chat_history.append(AIMessage(content=response))
+                        sql_query, sql_response, natural_language_response = get_combined_response(user_query, st.session_state.db, st.session_state.chat_history)
+                        content_pack = [sql_query, sql_response, natural_language_response]
+                        st.code(sql_query)
+                        st.dataframe(sql_response)
+                        st.write(natural_language_response)
+                        st.session_state.chat_history.append(AIMessage(content=content_pack))
                     else:
                         st.error("Please connect to the database first.")
                 except Exception as e:
                     st.error(f"Error generating response: {e}")
-
-    elif page == "General Mode":
-        llama_page()
 
 if __name__ == "__main__":
     main()
