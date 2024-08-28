@@ -251,6 +251,7 @@ def get_natural_language_chain(db: SQLDatabase):
 
 # Function to execute and combine chains
 def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
+    st.write(chat_history)
     # First, run the SQL generation chain
     sql_chain = get_sql_chain(db)
     sql_query = sql_chain.invoke({
