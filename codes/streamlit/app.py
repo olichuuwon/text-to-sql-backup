@@ -299,6 +299,24 @@ def is_safe_query(sql_query):
     # Remove leading/trailing whitespace
     stripped_query = sql_query.strip()
 
+    # Check for forbidden keywords in the first statement
+    forbidden_keywords = [
+        "drop",
+        "insert",
+        "update",
+        "delete",
+        "create",
+        "alter",
+        "truncate",
+        "exec",
+        "execute",
+        "xp_cmdshell",
+    ]
+
+    for keyword in forbidden_keywords:
+        if re.search(r"\b" + keyword + r"\b", stripped_query, re.IGNORECASE):
+            return False
+
     # Split the query by semicolon and take the first part
     first_part = stripped_query.split(";", 1)[0].strip()
 
@@ -319,23 +337,6 @@ def is_safe_query(sql_query):
 
     if re.search(r"\bunion\b", first_part, re.IGNORECASE):
         return False
-
-    # Check for forbidden keywords in the first statement
-    forbidden_keywords = [
-        "drop",
-        "insert",
-        "update",
-        "delete",
-        "create",
-        "alter",
-        "truncate",
-        "exec",
-        "execute",
-        "xp_cmdshell",
-    ]
-    for keyword in forbidden_keywords:
-        if re.search(r"\b" + keyword + r"\b", first_part, re.IGNORECASE):
-            return False
 
     return True
 
