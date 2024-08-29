@@ -109,7 +109,7 @@ def display_sql_execution(db_uri: str) -> None:
                 except Exception as e:
                     st.error(f"Error executing SQL query: {e}")
             else:
-                st.error("Only single SELECT statements without harmful keywords or characters are allowed.")
+                st.error("Only single SELECT statements are allowed. The use of harmful keywords such as UNION, DROP, INSERT, UPDATE, DELETE, CREATE, ALTER, TRUNCATE, EXEC, EXECUTE, and XP_CMDSHELL, as well as comments (e.g., --, #, / /) or mismatched quotes, is prohibited.")
 
 
 # Function to get SQL query chain
@@ -259,23 +259,24 @@ def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
         "chat_history": chat_history
     })
 
-    # Execute the SQL query
-    engine = create_engine(st.session_state.db_uri)
-    with engine.connect() as connection:
-        result_df = pd.read_sql(sql_query, connection)
+    print(sql_query)
+    if is_safe_query(sql_query):
+        # Execute the SQL query
+        engine = create_engine(st.session_state.db_uri)
+        with engine.connect() as connection:
+            result_df = pd.read_sql(sql_query, connection)
 
-    # Prepare SQL response in a suitable format
-    sql_response = result_df  # You may adjust this format based on your needs
+        # Then, run the Natural Language chain
+        nl_chain = get_natural_language_chain(db)
+        natural_language_response = nl_chain.stream({
+            "query": sql_query,
+            "response": result_df,
+            "chat_history": chat_history
+        })
 
-    # Then, run the Natural Language chain
-    nl_chain = get_natural_language_chain(db)
-    natural_language_response = nl_chain.invoke({
-        "query": sql_query,
-        "response": sql_response,
-        "chat_history": chat_history
-    })
-
-    return sql_query, sql_response, natural_language_response
+        return sql_query, result_df, natural_language_response
+    else:
+        return None
 
 # Function to validate SQL query
 def is_safe_query(sql_query):
@@ -311,14 +312,35 @@ def is_safe_query(sql_query):
 
     return True
 
+def get_response(user_query, chat_history):
+
+    template = """
+    You are a helpful assistant. Answer the following questions considering the history of the conversation:
+
+    Chat history: {chat_history}
+
+    User question: {user_question}
+    """
+
+    prompt = ChatPromptTemplate.from_template(template)
+
+    llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
+        
+    chain = prompt | llm | StrOutputParser()
+    
+    return chain.stream({
+        "chat_history": chat_history,
+        "user_question": user_query,
+    })
+
 # Function for the general chat page
 def general_mode():
-    st.title("💭 General Mode")
+    st.title("🦥 General Mode")
 
     # Initialize chat history in session state if not already done
     if "general_chat_history" not in st.session_state:
         st.session_state.general_chat_history = [
-            AIMessage(content="Hello! Feel free to ask me about anything."),
+            AIMessage(content="Hello, I am a bot. How can I help you?"),
         ]
 
     # Display chat history
@@ -331,7 +353,7 @@ def general_mode():
                 st.markdown(message.content)
 
     # Input for user query
-    user_query = st.chat_input("Type a message...")
+    user_query = st.chat_input("Type your message here...")
     if user_query is not None and user_query.strip() != "":
         st.session_state.general_chat_history.append(HumanMessage(content=user_query))
 
@@ -339,10 +361,7 @@ def general_mode():
             st.markdown(user_query)
 
         with st.chat_message("AI"):
-            llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
-            response = llm(user_query)
-            st.markdown(response)
-
+            response = st.write_stream(get_response(user_query, st.session_state.general_chat_history))
         st.session_state.general_chat_history.append(AIMessage(content=response))
 
 
@@ -352,7 +371,7 @@ def main():
         general_mode()
     elif page == "Database Mode":
         # Check the state of 'db' and set is_disabled accordingly
-        is_disabled = st.session_state.db is None
+        is_disabled = st.session_state.db is None # User locked from doing things
 
         st.title("🐘 Database Mode")
         st.caption(f"Database {'Connected' if st.session_state.db else 'Not Connected'}")
@@ -360,21 +379,22 @@ def main():
         # Attempt to connect to the database only if the Connect button has been used
         if st.session_state.db is not None:
             try:
-                engine = create_engine(st.session_state.db_uri)
+                create_engine(st.session_state.db_uri)
                 display_table_schema(st.session_state.db_uri)
                 display_sql_execution(st.session_state.db_uri)
             except Exception as e:
                 st.error(f"Error: {e}")
 
         # Initialize chat history in session state if not already done
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = [
+        if "database_chat_history" not in st.session_state:
+            st.session_state.database_chat_history = [
                 AIMessage(content="Hello! Feel free to ask me anything about your database."),
             ]
 
+        # Viewing and rendering chat history
         if st.session_state.db is not None:
             # Display chat history
-            for message in st.session_state.chat_history:
+            for message in st.session_state.database_chat_history:
                 if isinstance(message, AIMessage):
                     with st.chat_message("AI"):
                         if type(message.content) == str:
@@ -389,22 +409,32 @@ def main():
                         st.markdown(message.content)
 
         # Input for user query
-        user_query = st.chat_input("Type a message...", disabled=is_disabled)
+        user_query = st.chat_input("Type your message here...", disabled=is_disabled)
         if user_query is not None and user_query.strip() != "":
-            st.session_state.chat_history.append(HumanMessage(content=user_query))
 
+            st.session_state.database_chat_history.append(HumanMessage(content=user_query))
             with st.chat_message("Human"):
                 st.markdown(user_query)
 
             with st.chat_message("AI"):
                 try:
                     if st.session_state.db is not None:
-                        sql_query, sql_response, natural_language_response = get_combined_response(user_query, st.session_state.db, st.session_state.chat_history)
-                        content_pack = [sql_query, sql_response, natural_language_response]
-                        st.code(sql_query)
-                        st.dataframe(sql_response)
-                        st.write(natural_language_response)
-                        st.session_state.chat_history.append(AIMessage(content=content_pack))
+                        
+                        result = get_combined_response(user_query, st.session_state.db, st.session_state.database_chat_history)
+                        
+                        if result is None:
+                            invalid_generation = "Only single SELECT statements are allowed. The use of harmful keywords such as UNION, DROP, INSERT, UPDATE, DELETE, CREATE, ALTER, TRUNCATE, EXEC, EXECUTE, and XP_CMDSHELL, as well as comments (e.g., --, #, / /) or mismatched quotes, is prohibited."
+                            st.write(invalid_generation)
+                            st.session_state.database_chat_history.append(AIMessage(content=invalid_generation))
+                        
+                        else:
+                            sql_query, sql_response, natural_language_response = result
+                            st.code(sql_query)
+                            st.dataframe(sql_response)
+                            natural_language_full = st.write_stream(natural_language_response)
+                            stored = [sql_query, sql_response.head(100), natural_language_full]
+                            st.session_state.database_chat_history.append(AIMessage(content=stored))
+                    
                     else:
                         st.error("Please connect to the database first.")
                 except Exception as e:
