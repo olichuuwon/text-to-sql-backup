@@ -20,7 +20,10 @@ MODEL_BASE_URL = os.getenv("MODEL_BASE_URL", "http://model:11434")
 
 # Sidebar for mode selection
 st.sidebar.title("LLM Tools")
-page = st.sidebar.selectbox("Select Mode", ["Database Mode", "General Mode"])
+database_mode = "Database Mode"
+general_mode = "General Mode"
+
+page = st.sidebar.selectbox("Select Mode", [database_mode, general_mode])
 
 # Sidebar inputs for database connection, only shown in Database Mode
 if page == "Database Mode":
@@ -299,43 +302,39 @@ def is_safe_query(sql_query):
     # Remove leading/trailing whitespace
     stripped_query = sql_query.strip()
 
-    # Check for forbidden keywords in the first statement
-    forbidden_keywords = [
-        "drop",
-        "insert",
-        "update",
-        "delete",
-        "create",
-        "alter",
-        "truncate",
-        "exec",
-        "execute",
-        "xp_cmdshell",
+    # Define forbidden keywords and patterns
+    forbidden_patterns = [
+        r"\bdrop\b",
+        r"\binsert\b",
+        r"\bupdate\b",
+        r"\bdelete\b",
+        r"\bcreate\b",
+        r"\balter\b",
+        r"\btruncate\b",
+        r"\bexec\b",
+        r"\bexecute\b",
+        r"\bxp_cmdshell\b",
+        r"\bunion\b",  # What about join, to be discussed
+        r"--",
+        r"#",
+        r"/\*",
+        r"\*/",
     ]
 
-    for keyword in forbidden_keywords:
-        if re.search(r"\b" + keyword + r"\b", stripped_query, re.IGNORECASE):
+    # Check for forbidden patterns
+    for pattern in forbidden_patterns:
+        if re.search(pattern, stripped_query, re.IGNORECASE):
             return False
+
+    # Check for an even number of single quotes (') and double quotes (")
+    if stripped_query.count("'") % 2 != 0 or stripped_query.count('"') % 2 != 0:
+        return False
 
     # Split the query by semicolon and take the first part
     first_part = stripped_query.split(";", 1)[0].strip()
 
     # Check if the first part starts with "SELECT"
     if not re.match(r"^select\s+", first_part, re.IGNORECASE):
-        return False
-
-    # Check for an even number of single quotes (') and double quotes (")
-    if first_part.count("'") % 2 != 0 or first_part.count('"') % 2 != 0:
-        return False
-
-    # Additional validation on the first statement
-    if "--" in first_part or "#" in first_part:
-        return False
-
-    if "/*" in first_part or "*/" in first_part:
-        return False
-
-    if re.search(r"\bunion\b", first_part, re.IGNORECASE):
         return False
 
     return True
@@ -366,7 +365,7 @@ def get_response(user_query, chat_history):
 
 
 # Function for the general chat page
-def general_mode():
+def general_mode_function():
     st.title("🦥 General Mode")
 
     # Initialize chat history in session state if not already done
@@ -401,9 +400,9 @@ def general_mode():
 
 # Main function to run the Streamlit app
 def main():
-    if page == "General Mode":
-        general_mode()
-    elif page == "Database Mode":
+    if page == general_mode:
+        general_mode_function()
+    elif page == database_mode:
         # Check the state of 'db' and set is_disabled accordingly
         is_disabled = st.session_state.db is None  # User locked from doing things
 
