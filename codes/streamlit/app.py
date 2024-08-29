@@ -15,8 +15,8 @@ from langchain_community.llms import Ollama
 st.set_page_config(page_title="LLM Tools", page_icon=":speech_balloon:")
 
 # Load model configurations from environment variables
-MODEL_NAME = os.getenv('MODEL_NAME', 'llama3:instruct')
-MODEL_BASE_URL = os.getenv('MODEL_BASE_URL', 'http://model:11434')
+MODEL_NAME = os.getenv("MODEL_NAME", "llama3:instruct")
+MODEL_BASE_URL = os.getenv("MODEL_BASE_URL", "http://model:11434")
 
 # Sidebar for mode selection
 st.sidebar.title("LLM Tools")
@@ -25,11 +25,13 @@ page = st.sidebar.selectbox("Select Mode", ["Database Mode", "General Mode"])
 # Sidebar inputs for database connection, only shown in Database Mode
 if page == "Database Mode":
     st.sidebar.title("Database Connection Settings")
-    db_host = st.sidebar.text_input("Host", value=os.getenv('DB_HOST', 'postgres'))
-    db_port = st.sidebar.text_input("Port", value=os.getenv('DB_PORT', '5432'))
-    db_user = st.sidebar.text_input("User", value=os.getenv('DB_USER', 'user'))
-    db_password = st.sidebar.text_input("Password", value=os.getenv('DB_PASSWORD', 'pass'), type="password")
-    db_name = st.sidebar.text_input("Database", value=os.getenv('DB_NAME', 'chinook'))
+    db_host = st.sidebar.text_input("Host", value=os.getenv("DB_HOST", "postgres"))
+    db_port = st.sidebar.text_input("Port", value=os.getenv("DB_PORT", "5432"))
+    db_user = st.sidebar.text_input("User", value=os.getenv("DB_USER", "user"))
+    db_password = st.sidebar.text_input(
+        "Password", value=os.getenv("DB_PASSWORD", "pass"), type="password"
+    )
+    db_name = st.sidebar.text_input("Database", value=os.getenv("DB_NAME", "chinook"))
 
     # Store connection details in session state
     if "db_uri" not in st.session_state:
@@ -38,11 +40,15 @@ if page == "Database Mode":
         st.session_state.db = None
 
     # Function to get database URI
-    def uri_database(user: str, password: str, host: str, port: str, database: str) -> str:
+    def uri_database(
+        user: str, password: str, host: str, port: str, database: str
+    ) -> str:
         return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
 
     # Update session state based on user input
-    st.session_state.db_uri = uri_database(db_user, db_password, db_host, db_port, db_name)
+    st.session_state.db_uri = uri_database(
+        db_user, db_password, db_host, db_port, db_name
+    )
 
     # Button to manually connect to the database
     if st.sidebar.button("Connect"):
@@ -50,9 +56,12 @@ if page == "Database Mode":
             engine = create_engine(st.session_state.db_uri)
             with engine.connect() as connection:
                 st.sidebar.success("Successfully connected to the database!")
-                st.session_state.db = SQLDatabase.from_uri(st.session_state.db_uri)  # Initialize database connection
+                st.session_state.db = SQLDatabase.from_uri(
+                    st.session_state.db_uri
+                )  # Initialize database connection
         except Exception as e:
             st.sidebar.error(f"Failed to connect to database: {e}")
+
 
 # Function to get table schema
 def get_table_schema(engine, table_name: str) -> PrettyTable:
@@ -61,8 +70,9 @@ def get_table_schema(engine, table_name: str) -> PrettyTable:
     schema_table.field_names = ["Column Name", "Data Type"]
     columns = inspector.get_columns(table_name)
     for column in columns:
-        schema_table.add_row([column['name'], column['type']])
+        schema_table.add_row([column["name"], column["type"]])
     return schema_table
+
 
 # Function to get sample data
 def get_sample_data(engine, table_name: str, sample_size: int = 1) -> PrettyTable:
@@ -74,6 +84,7 @@ def get_sample_data(engine, table_name: str, sample_size: int = 1) -> PrettyTabl
         for _, row in df.iterrows():
             sample_data_table.add_row(row.tolist())
     return sample_data_table
+
 
 # Function to display table information
 def display_table_schema(db_uri: str, sample_size: int = 1) -> None:
@@ -87,29 +98,42 @@ def display_table_schema(db_uri: str, sample_size: int = 1) -> None:
             st.write("Sample Data:")
             st.write(get_sample_data(engine, table_name, sample_size))
 
+
 # Manual SQL Command Execution in the sidebar
 def display_sql_execution(db_uri: str) -> None:
     engine = create_engine(db_uri)
     with st.expander("Run Statements Manually"):
         st.caption("Name 10 tracks.")
         st.code('SELECT * FROM "Track" LIMIT 10;', language="sql", line_numbers=False)
-        st.caption("List of the top 50 customers based on their total sales, ordered in descending order.")
-        st.code('SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", (SELECT SUM("Invoice"."Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" ORDER BY TotalSales DESC LIMIT 50;', language="sql", line_numbers=False)
-        sql_query = st.text_area("Enter SQL query:", height=100, key="sql_query_sidebar")
+        st.caption(
+            "List of the top 50 customers based on their total sales, ordered in descending order."
+        )
+        st.code(
+            'SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", (SELECT SUM("Invoice"."Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" ORDER BY TotalSales DESC LIMIT 50;',
+            language="sql",
+            line_numbers=False,
+        )
+        sql_query = st.text_area(
+            "Enter SQL query:", height=100, key="sql_query_sidebar"
+        )
         if st.button("Fetch", key="run_sql_sidebar"):
             # Consider only the first part of the query (up to the first semicolon)
             if is_safe_query(sql_query):
                 try:
-                    first_part = sql_query.split(';', 1)[0].strip()
+                    first_part = sql_query.split(";", 1)[0].strip()
                     with engine.connect() as connection:
-                        result = connection.execute(text(first_part))  # Wrap query with text()
+                        result = connection.execute(
+                            text(first_part)
+                        )  # Wrap query with text()
                         df = pd.DataFrame(result.fetchall(), columns=result.keys())
                         st.write("Query Result:")
                         st.dataframe(df)  # Display the result as a dataframe
                 except Exception as e:
                     st.error(f"Error executing SQL query: {e}")
             else:
-                st.error("Only single SELECT statements are allowed. The use of harmful keywords such as UNION, DROP, INSERT, UPDATE, DELETE, CREATE, ALTER, TRUNCATE, EXEC, EXECUTE, and XP_CMDSHELL, as well as comments (e.g., --, #, / /) or mismatched quotes, is prohibited.")
+                st.error(
+                    "Only single SELECT statements are allowed. The use of harmful keywords such as UNION, DROP, INSERT, UPDATE, DELETE, CREATE, ALTER, TRUNCATE, EXEC, EXECUTE, and XP_CMDSHELL, as well as comments (e.g., --, #, / /) or mismatched quotes, is prohibited."
+                )
 
 
 # Function to get SQL query chain
@@ -215,11 +239,9 @@ def get_sql_chain(db: SQLDatabase):
         return db.get_table_info()
 
     return (
-        RunnablePassthrough.assign(schema=get_schema)
-        | prompt
-        | llm
-        | StrOutputParser()
+        RunnablePassthrough.assign(schema=get_schema) | prompt | llm | StrOutputParser()
     )
+
 
 # Function to get Natural Language Response Chain
 def get_natural_language_chain(db: SQLDatabase):
@@ -243,21 +265,16 @@ def get_natural_language_chain(db: SQLDatabase):
         return db.get_table_info()
 
     return (
-        RunnablePassthrough.assign(schema=get_schema)
-        | prompt
-        | llm
-        | StrOutputParser()
+        RunnablePassthrough.assign(schema=get_schema) | prompt | llm | StrOutputParser()
     )
+
 
 # Function to execute and combine chains
 def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
     st.write(chat_history)
     # First, run the SQL generation chain
     sql_chain = get_sql_chain(db)
-    sql_query = sql_chain.invoke({
-        "question": user_query,
-        "chat_history": chat_history
-    })
+    sql_query = sql_chain.invoke({"question": user_query, "chat_history": chat_history})
 
     print(sql_query)
     if is_safe_query(sql_query):
@@ -268,15 +285,14 @@ def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
 
         # Then, run the Natural Language chain
         nl_chain = get_natural_language_chain(db)
-        natural_language_response = nl_chain.stream({
-            "query": sql_query,
-            "response": result_df,
-            "chat_history": chat_history
-        })
+        natural_language_response = nl_chain.stream(
+            {"query": sql_query, "response": result_df, "chat_history": chat_history}
+        )
 
         return sql_query, result_df, natural_language_response
     else:
         return None
+
 
 # Function to validate SQL query
 def is_safe_query(sql_query):
@@ -284,10 +300,10 @@ def is_safe_query(sql_query):
     stripped_query = sql_query.strip()
 
     # Split the query by semicolon and take the first part
-    first_part = stripped_query.split(';', 1)[0].strip()
+    first_part = stripped_query.split(";", 1)[0].strip()
 
     # Check if the first part starts with "SELECT"
-    if not re.match(r'^select\s+', first_part, re.IGNORECASE):
+    if not re.match(r"^select\s+", first_part, re.IGNORECASE):
         return False
 
     # Check for an even number of single quotes (') and double quotes (")
@@ -295,22 +311,34 @@ def is_safe_query(sql_query):
         return False
 
     # Additional validation on the first statement
-    if '--' in first_part or '#' in first_part:
+    if "--" in first_part or "#" in first_part:
         return False
 
-    if '/*' in first_part or '*/' in first_part:
+    if "/*" in first_part or "*/" in first_part:
         return False
 
-    if re.search(r'\bunion\b', first_part, re.IGNORECASE):
+    if re.search(r"\bunion\b", first_part, re.IGNORECASE):
         return False
 
     # Check for forbidden keywords in the first statement
-    forbidden_keywords = ['drop', 'insert', 'update', 'delete', 'create', 'alter', 'truncate', 'exec', 'execute', 'xp_cmdshell']
+    forbidden_keywords = [
+        "drop",
+        "insert",
+        "update",
+        "delete",
+        "create",
+        "alter",
+        "truncate",
+        "exec",
+        "execute",
+        "xp_cmdshell",
+    ]
     for keyword in forbidden_keywords:
-        if re.search(r'\b' + keyword + r'\b', first_part, re.IGNORECASE):
+        if re.search(r"\b" + keyword + r"\b", first_part, re.IGNORECASE):
             return False
 
     return True
+
 
 def get_response(user_query, chat_history):
 
@@ -325,13 +353,16 @@ def get_response(user_query, chat_history):
     prompt = ChatPromptTemplate.from_template(template)
 
     llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
-        
+
     chain = prompt | llm | StrOutputParser()
-    
-    return chain.stream({
-        "chat_history": chat_history,
-        "user_question": user_query,
-    })
+
+    return chain.stream(
+        {
+            "chat_history": chat_history,
+            "user_question": user_query,
+        }
+    )
+
 
 # Function for the general chat page
 def general_mode():
@@ -361,7 +392,9 @@ def general_mode():
             st.markdown(user_query)
 
         with st.chat_message("AI"):
-            response = st.write_stream(get_response(user_query, st.session_state.general_chat_history))
+            response = st.write_stream(
+                get_response(user_query, st.session_state.general_chat_history)
+            )
         st.session_state.general_chat_history.append(AIMessage(content=response))
 
 
@@ -371,10 +404,12 @@ def main():
         general_mode()
     elif page == "Database Mode":
         # Check the state of 'db' and set is_disabled accordingly
-        is_disabled = st.session_state.db is None # User locked from doing things
+        is_disabled = st.session_state.db is None  # User locked from doing things
 
         st.title("🐘 Database Mode")
-        st.caption(f"Database {'Connected' if st.session_state.db else 'Not Connected'}")
+        st.caption(
+            f"Database {'Connected' if st.session_state.db else 'Not Connected'}"
+        )
 
         # Attempt to connect to the database only if the Connect button has been used
         if st.session_state.db is not None:
@@ -388,7 +423,9 @@ def main():
         # Initialize chat history in session state if not already done
         if "database_chat_history" not in st.session_state:
             st.session_state.database_chat_history = [
-                AIMessage(content="Hello! Feel free to ask me anything about your database."),
+                AIMessage(
+                    content="Hello! Feel free to ask me anything about your database."
+                ),
             ]
 
         # Viewing and rendering chat history
@@ -400,7 +437,9 @@ def main():
                         if type(message.content) == str:
                             st.markdown(message.content)
                         else:
-                            sql_query, sql_response, natural_language_response = message.content
+                            sql_query, sql_response, natural_language_response = (
+                                message.content
+                            )
                             st.code(sql_query)
                             st.dataframe(sql_response)
                             st.write(natural_language_response)
@@ -412,33 +451,50 @@ def main():
         user_query = st.chat_input("Type your message here...", disabled=is_disabled)
         if user_query is not None and user_query.strip() != "":
 
-            st.session_state.database_chat_history.append(HumanMessage(content=user_query))
+            st.session_state.database_chat_history.append(
+                HumanMessage(content=user_query)
+            )
             with st.chat_message("Human"):
                 st.markdown(user_query)
 
             with st.chat_message("AI"):
                 try:
                     if st.session_state.db is not None:
-                        
-                        result = get_combined_response(user_query, st.session_state.db, st.session_state.database_chat_history)
-                        
+
+                        result = get_combined_response(
+                            user_query,
+                            st.session_state.db,
+                            st.session_state.database_chat_history,
+                        )
+
                         if result is None:
                             invalid_generation = "Only single SELECT statements are allowed. The use of harmful keywords such as UNION, DROP, INSERT, UPDATE, DELETE, CREATE, ALTER, TRUNCATE, EXEC, EXECUTE, and XP_CMDSHELL, as well as comments (e.g., --, #, / /) or mismatched quotes, is prohibited."
                             st.write(invalid_generation)
-                            st.session_state.database_chat_history.append(AIMessage(content=invalid_generation))
-                        
+                            st.session_state.database_chat_history.append(
+                                AIMessage(content=invalid_generation)
+                            )
+
                         else:
                             sql_query, sql_response, natural_language_response = result
                             st.code(sql_query)
                             st.dataframe(sql_response)
-                            natural_language_full = st.write_stream(natural_language_response)
-                            stored = [sql_query, sql_response.head(100), natural_language_full]
-                            st.session_state.database_chat_history.append(AIMessage(content=stored))
-                    
+                            natural_language_full = st.write_stream(
+                                natural_language_response
+                            )
+                            stored = [
+                                sql_query,
+                                sql_response.head(100),
+                                natural_language_full,
+                            ]
+                            st.session_state.database_chat_history.append(
+                                AIMessage(content=stored)
+                            )
+
                     else:
                         st.error("Please connect to the database first.")
                 except Exception as e:
                     st.error(f"Error generating response: {e}")
+
 
 if __name__ == "__main__":
     main()
