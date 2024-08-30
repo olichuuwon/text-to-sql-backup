@@ -13,11 +13,22 @@ spec:
       labels:
         app: streamlit-app
     spec:
+      automountServiceAccountToken: false  # Disable service account token mounting if not needed
       containers:
       - name: streamlit-app
-        image: jieshilyn/streamlit-app
+        image: jieshilyn/streamlit-app:latest
+        ports:
+          - containerPort: 8501
+        resources:
+          requests:
+            memory: "128Mi"  # Adjust according to the app's expected usage
+            cpu: "100m"      # Adjust according to the app's expected usage
+            ephemeral-storage: "500Mi"  # Request for ephemeral storage
+          limits:
+            memory: "256Mi"  # Adjust according to the app's expected usage
+            cpu: "200m"      # Adjust according to the app's expected usage
+            ephemeral-storage: "1Gi"  # Request for ephemeral storage
+        # Uncomment and configure environment variables as needed for the app
         # env:
         #   - name: DB_HOST
         #     value: "postgres"
-        ports:
-          - containerPort: 8501

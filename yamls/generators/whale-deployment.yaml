@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whales-stream-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: whales-stream-2
+  template:
+    metadata:
+      labels:
+        app: whales-stream-2
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: whales-stream-2
+          image: jieshilyn/whales_pg_generator:latest
+          env:
+            - name: FARM
+              value: "Farm2"
+            - name: TABLE
+              value: "whale_locations"
+            - name: PG_HOST
+              value: "postgres"
+            - name: PG_PORT
+              value: "5432"
+            - name: PG_DATABASE
+              value: "postgres"
+            - name: PG_USER
+              value: "user"
+            - name: PG_PASSWORD
+              value: "pass"
+            - name: DELAY_RANGE
+              value: "0.1-1"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+              ephemeral-storage: "250Mi"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+              ephemeral-storage: "500Mi"

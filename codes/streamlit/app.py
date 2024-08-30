@@ -274,27 +274,36 @@ def get_natural_language_chain(db: SQLDatabase):
 
 # Function to execute and combine chains
 def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
-    st.write(chat_history)
-    # First, run the SQL generation chain
-    sql_chain = get_sql_chain(db)
-    sql_query = sql_chain.invoke({"question": user_query, "chat_history": chat_history})
+    # Look at the history
+    # st.write(chat_history)
 
-    print(sql_query)
-    if is_safe_query(sql_query):
-        # Execute the SQL query
-        engine = create_engine(st.session_state.db_uri)
-        with engine.connect() as connection:
-            result_df = pd.read_sql(sql_query, connection)
-
-        # Then, run the Natural Language chain
-        nl_chain = get_natural_language_chain(db)
-        natural_language_response = nl_chain.stream(
-            {"query": sql_query, "response": result_df, "chat_history": chat_history}
+    with st.spinner():
+        # First, run the SQL generation chain
+        sql_chain = get_sql_chain(db)
+        sql_query = sql_chain.invoke(
+            {"question": user_query, "chat_history": chat_history}
         )
 
-        return sql_query, result_df, natural_language_response
-    else:
-        return None
+        print(sql_query)
+        if is_safe_query(sql_query):
+            # Execute the SQL query
+            engine = create_engine(st.session_state.db_uri)
+            with engine.connect() as connection:
+                result_df = pd.read_sql(sql_query, connection)
+
+            # Then, run the Natural Language chain
+            nl_chain = get_natural_language_chain(db)
+            natural_language_response = nl_chain.stream(
+                {
+                    "query": sql_query,
+                    "response": result_df,
+                    "chat_history": chat_history,
+                }
+            )
+
+            return sql_query, result_df, natural_language_response
+        else:
+            return None
 
 
 # Function to validate SQL query
@@ -314,7 +323,7 @@ def is_safe_query(sql_query):
         r"\bexec\b",
         r"\bexecute\b",
         r"\bxp_cmdshell\b",
-        r"\bunion\b",  # What about join, to be discussed
+        r"\bunion\b",  # What about join, to be discussed, if no join, to adjust prompt
         r"--",
         r"#",
         r"/\*",
@@ -437,11 +446,8 @@ def main():
                         if type(message.content) == str:
                             st.markdown(message.content)
                         else:
-                            sql_query, sql_response, natural_language_response = (
-                                message.content
-                            )
+                            sql_query, natural_language_response = message.content
                             st.code(sql_query)
-                            st.dataframe(sql_response)
                             st.write(natural_language_response)
                 elif isinstance(message, HumanMessage):
                     with st.chat_message("Human"):
@@ -483,7 +489,6 @@ def main():
                             )
                             stored = [
                                 sql_query,
-                                sql_response.head(100),
                                 natural_language_full,
                             ]
                             st.session_state.database_chat_history.append(

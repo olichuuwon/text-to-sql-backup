@@ -13,8 +13,18 @@ spec:
       labels:
         app: model
     spec:
+      automountServiceAccountToken: false  # Disable service account token mounting if not needed
       containers:
       - name: model
-        image: jieshilyn/ollama-llama-8b
+        image: jieshilyn/ollama-llama-8b:latest
         ports:
           - containerPort: 11434
+        resources:
+          requests:
+            memory: "512Mi"      # Adjust according to the model's expected usage
+            cpu: "250m"          # Adjust according to the model's expected usage
+            ephemeral-storage: "1Gi"  # Request for ephemeral storage
+          limits:
+            memory: "1Gi"        # Adjust according to the model's expected usage
+            cpu: "500m"          # Adjust according to the model's expected usage
+            ephemeral-storage: "2Gi"  # Limit for ephemeral storage

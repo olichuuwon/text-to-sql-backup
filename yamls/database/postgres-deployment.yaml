@@ -16,9 +16,10 @@ spec:
       securityContext:
         runAsUser: 1000  # Specify a non-root user if needed
         fsGroup: 1000
+      automountServiceAccountToken: false
       containers:
       - name: postgres
-        image: jieshilyn/postgres-populated
+        image: jieshilyn/postgres-populated:latest
         ports:
         - containerPort: 5432
         env:
@@ -31,6 +32,15 @@ spec:
               key: POSTGRES_PASSWORD
         - name: POSTGRES_DB
           value: "chinook"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+            ephemeral-storage: "1Gi"  # Request for ephemeral storage
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+            ephemeral-storage: "2Gi"  # Request for ephemeral storage
         volumeMounts:
         - mountPath: /var/lib/postgresql/data
           name: postgres-storage
