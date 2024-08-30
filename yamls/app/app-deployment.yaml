@@ -25,8 +25,8 @@ spec:
             cpu: "100m"      # Adjust according to the app's expected usage
             ephemeral-storage: "500Mi"  # Request for ephemeral storage
           limits:
-            memory: "256Mi"  # Adjust according to the app's expected usage
-            cpu: "200m"      # Adjust according to the app's expected usage
+            memory: "1000Mi"  # Adjust according to the app's expected usage
+            cpu: "1000m"      # Adjust according to the app's expected usage
             ephemeral-storage: "1Gi"  # Request for ephemeral storage
         # Uncomment and configure environment variables as needed for the app
         # env:
