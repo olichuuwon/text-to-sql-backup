@@ -13,6 +13,8 @@ spec:
       labels:
         app: postgres
     spec:
+      imagePullSecrets:
+      - name: my-dockerhub-secret
       # automountServiceAccountToken: false  # Disable service account token mounting if not needed
       securityContext:
         runAsUser: 1000950000    # Specify a non-root user if needed

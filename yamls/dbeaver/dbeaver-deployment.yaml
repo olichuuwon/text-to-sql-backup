@@ -13,6 +13,8 @@ spec:
       labels:
         app: dbeaver
     spec:
+      imagePullSecrets:
+      - name: my-dockerhub-secret
       automountServiceAccountToken: false
       containers:
         - name: dbeaver

@@ -13,6 +13,8 @@ spec:
       labels:
         app: birds-stream-3
     spec:
+      imagePullSecrets:
+      - name: my-dockerhub-secret
       automountServiceAccountToken: false
       containers:
         - name: birds-stream-3

@@ -13,6 +13,8 @@ spec:
       labels:
         app: sheeps-stream-1
     spec:
+      imagePullSecrets:
+      - name: my-dockerhub-secret
       automountServiceAccountToken: false
       containers:
         - name: sheeps-stream-1
