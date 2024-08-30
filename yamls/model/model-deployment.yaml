@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: model
-  # namespace: text2sql
+  namespace: text2sql
 spec:
   replicas: 1
   selector:

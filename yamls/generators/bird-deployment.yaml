@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: birds-stream-3
+  namespace: text2sql
 spec:
   replicas: 1
   selector:

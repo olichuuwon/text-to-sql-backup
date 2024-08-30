@@ -148,19 +148,21 @@ def get_sql_chain(db: SQLDatabase):
     <SCHEMA>{schema}</SCHEMA>
     
     Conversation History: {chat_history}
-    
-    Instructions:
-    - Use UTC timing for any date or time calculations.
-    - Convert epoch timestamps to UTC timing if necessary.
-    - Prioritize the use of SELECT statements with explicit column names; use "*" only when all columns are required.
-    - Use JOIN operations judiciously to ensure data integrity when multiple tables are referenced. Avoid UNION unless absolutely necessary.
-    - Limit the result set to a maximum of 100,000 rows to prevent large data returns.
-    - Always use explicit table names or aliases when referencing columns to prevent ambiguity, especially if the column name exists in multiple tables.
-    - Avoid using constructs not supported by PostgreSQL, such as CROSS APPLY.
-    - Handle null values and ensure to include conditions that maintain data integrity in joins and filters.
-    - Ensure that aggregation functions (e.g., COUNT, SUM, AVG) are used with GROUP BY clauses when necessary.
-    - The syntax for the random function in PostgreSQL is: random()
 
+    Instructions:
+
+    1. Use UTC timing for any date or time calculations; avoid using UTC+8.
+    2. Convert epoch timestamps to UTC timing if necessary.
+    3. Prioritize the use of `SELECT` statements with explicit column names; use "*" only when all columns are required.
+    4. Avoid the use of `UNION` and `JOIN` operations. Structure queries to work without these constructs to maintain simplicity and efficiency.
+    5. Limit the result set to a maximum of 100,000 rows to prevent large data returns.
+    6. Always use explicit table names or aliases when referencing columns to prevent ambiguity, especially if the column name exists in multiple tables.
+    7. Avoid using constructs not supported by PostgreSQL, such as `CROSS APPLY`.
+    8. Handle null values and ensure to include conditions that maintain data integrity in filters.
+    9. Ensure that aggregation functions (e.g., `COUNT`, `SUM`, `AVG`) are used with `GROUP BY` clauses when necessary.
+    10. The syntax for the random function in PostgreSQL is: `random()`. 
+
+    Format:
     Write only the SQL query and nothing else.
     Do not wrap the SQL query in any other text, not even backticks.
     Do not reply to the user, and only respond with SQL queries.
@@ -323,7 +325,8 @@ def is_safe_query(sql_query):
         r"\bexec\b",
         r"\bexecute\b",
         r"\bxp_cmdshell\b",
-        r"\bunion\b",  # What about join, to be discussed, if no join, to adjust prompt
+        r"\bunion\b",
+        r"\bjoin\b",
         r"--",
         r"#",
         r"/\*",

@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dbeaver
+  namespace: text2sql
 spec:
   replicas: 1
   selector:
@@ -29,7 +30,7 @@ spec:
             limits:
               # memory: "512Mi"
               # cpu: "500m"
-              ephemeral-storage: "1Gi"
+              ephemeral-storage: "5Gi"
           volumeMounts:
             - name: dbeaver-data
               mountPath: /root/.dbeaver4
