@@ -13,7 +13,7 @@ spec:
       labels:
         app: postgres
     spec:
-      automountServiceAccountToken: false  # Disable service account token mounting if not needed
+      # automountServiceAccountToken: false  # Disable service account token mounting if not needed
       securityContext:
         runAsUser: 1000940000    # Specify a non-root user if needed
         fsGroup: 1000940000  
