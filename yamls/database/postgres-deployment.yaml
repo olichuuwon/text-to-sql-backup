@@ -40,7 +40,7 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
-            ephemeral-storage: "2Gi"  # Request for ephemeral storage
+            ephemeral-storage: "10Gi"  # Request for ephemeral storage
         volumeMounts:
         - mountPath: /var/lib/postgresql/data
           name: postgres-storage
