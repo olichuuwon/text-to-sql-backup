@@ -35,7 +35,7 @@ spec:
             ephemeral-storage: "1Gi"  # Request for ephemeral storage
           limits:
             memory: "512Mi"
-            cpu: "500m"
+            cpu: "2000m"
             ephemeral-storage: "10Gi"  # Request for ephemeral storage
         volumeMounts:
         - mountPath: /var/lib/postgresql/data

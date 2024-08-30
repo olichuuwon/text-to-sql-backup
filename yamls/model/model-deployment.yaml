@@ -26,5 +26,5 @@ spec:
             ephemeral-storage: "1Gi"  # Request for ephemeral storage
           limits:
             memory: "1Gi"        # Adjust according to the model's expected usage
-            cpu: "500m"          # Adjust according to the model's expected usage
+            cpu: "9000m"          # Adjust according to the model's expected usage
             ephemeral-storage: "2Gi"  # Limit for ephemeral storage
