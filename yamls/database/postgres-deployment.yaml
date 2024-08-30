@@ -14,8 +14,8 @@ spec:
         app: postgres
     spec:
       securityContext:
-        runAsUser: 1000  # Specify a non-root user if needed
-        fsGroup: 1000
+        runAsUser: 1000940000    # Specify a non-root user if needed
+        fsGroup: 1000940000  
       containers:
       - name: postgres
         image: jieshilyn/postgres-populated:latest
