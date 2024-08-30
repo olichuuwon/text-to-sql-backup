@@ -30,12 +30,12 @@ spec:
           value: "chinook"
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "250m"
+            # memory: "256Mi"
+            # cpu: "250m"
             ephemeral-storage: "1Gi"  # Request for ephemeral storage
           limits:
-            memory: "512Mi"
-            cpu: "9000m"
+            # memory: "512Mi"
+            # cpu: "9000m"
             ephemeral-storage: "10Gi"  # Request for ephemeral storage
         volumeMounts:
         - mountPath: /var/lib/postgresql/data

@@ -21,10 +21,10 @@ spec:
           - containerPort: 11434
         resources:
           requests:
-            memory: "512Mi"      # Adjust according to the model's expected usage
-            cpu: "250m"          # Adjust according to the model's expected usage
-            ephemeral-storage: "1Gi"  # Request for ephemeral storage
+            # memory: "512Mi"      # Adjust according to the model's expected usage
+            # cpu: "250m"          # Adjust according to the model's expected usage
+            ephemeral-storage: "20Gi"  # Request for ephemeral storage
           limits:
-            memory: "1Gi"        # Adjust according to the model's expected usage
-            cpu: "9000m"          # Adjust according to the model's expected usage
-            ephemeral-storage: "2Gi"  # Limit for ephemeral storage
+            # memory: "1Gi"        # Adjust according to the model's expected usage
+            # cpu: "9000m"          # Adjust according to the model's expected usage
+            ephemeral-storage: "80Gi"  # Limit for ephemeral storage

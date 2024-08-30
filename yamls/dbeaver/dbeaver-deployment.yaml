@@ -23,12 +23,12 @@ spec:
             - containerPort: 8978
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "250m"
+              # memory: "256Mi"
+              # cpu: "250m"
               ephemeral-storage: "500Mi"
             limits:
-              memory: "512Mi"
-              cpu: "500m"
+              # memory: "512Mi"
+              # cpu: "500m"
               ephemeral-storage: "1Gi"
           volumeMounts:
             - name: dbeaver-data

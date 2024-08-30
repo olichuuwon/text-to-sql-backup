@@ -35,10 +35,10 @@ spec:
               value: "0.1-1"
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              # memory: "128Mi"
+              # cpu: "100m"
               ephemeral-storage: "250Mi"
             limits:
-              memory: "256Mi"
-              cpu: "200m"
+              # memory: "256Mi"
+              # cpu: "200m"
               ephemeral-storage: "500Mi"
