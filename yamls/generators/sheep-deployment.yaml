@@ -26,7 +26,7 @@ spec:
             - name: PG_PORT
               value: "5432"
             - name: PG_DATABASE
-              value: "postgres"
+              value: "chinook"
             - name: PG_USER
               value: "user"
             - name: PG_PASSWORD
