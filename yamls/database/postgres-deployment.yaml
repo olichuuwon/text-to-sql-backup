@@ -16,7 +16,6 @@ spec:
       securityContext:
         runAsUser: 1000  # Specify a non-root user if needed
         fsGroup: 1000
-      automountServiceAccountToken: false
       containers:
       - name: postgres
         image: jieshilyn/postgres-populated:latest
