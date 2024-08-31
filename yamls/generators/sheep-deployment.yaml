@@ -4,7 +4,7 @@ metadata:
   name: sheeps-stream-1
   namespace: text2sql
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: sheeps-stream-1

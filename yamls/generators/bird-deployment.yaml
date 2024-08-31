@@ -4,7 +4,7 @@ metadata:
   name: birds-stream-3
   namespace: text2sql
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: birds-stream-3
