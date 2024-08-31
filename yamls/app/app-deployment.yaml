@@ -16,7 +16,7 @@ spec:
       automountServiceAccountToken: false  # Disable service account token mounting if not needed
       containers:
       - name: streamlit-app
-        image: default-route-openshift-image-registry.nebula.sl/text2sql/streamlit-app:latest
+        image: https://default-route-openshift-image-registry.nebula.sl/text2sql/streamlit-app:latest
         ports:
           - containerPort: 8501
         resources:
