@@ -4,7 +4,7 @@ metadata:
   name: model
   namespace: text2sql
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: model
@@ -13,8 +13,6 @@ spec:
       labels:
         app: model
     spec:
-      imagePullSecrets:
-      - name: my-dockerhub-secret
       automountServiceAccountToken: false  # Disable service account token mounting if not needed
       containers:
       - name: model
