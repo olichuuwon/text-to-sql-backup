@@ -15,7 +15,7 @@ spec:
     spec:
       serviceAccountName: my-service-account
       imagePullSecrets:
-      - name: my-dockerhub-secret
+      - name: my-registry-secret
       automountServiceAccountToken: false  # Disable service account token mounting if not needed
       containers:
       - name: streamlit-app
