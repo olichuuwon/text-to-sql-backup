@@ -4,7 +4,7 @@ metadata:
   name: streamlit-app
   namespace: text2sql
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: streamlit-app
@@ -13,13 +13,9 @@ spec:
       labels:
         app: streamlit-app
     spec:
-      serviceAccountName: my-service-account
-      imagePullSecrets:
-      - name: my-dockerhub-secret
-      automountServiceAccountToken: false  # Disable service account token mounting if not needed
       containers:
       - name: streamlit-app
-        image: image-registry.openshift-image-registry.svc:5000/text2sql/streamlit-app:latest
+        image: quay.io/jeslynlamxy/streamlit-app:latest
         ports:
           - containerPort: 8501
         resources:

@@ -4,7 +4,7 @@ metadata:
   name: postgres
   namespace: text2sql
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: postgres
@@ -13,13 +13,12 @@ spec:
       labels:
         app: postgres
     spec:
-      # automountServiceAccountToken: false  # Disable service account token mounting if not needed
       securityContext:
         runAsUser: 1000950000    # Specify a non-root user if needed
         fsGroup: 1000950000  
       containers:
       - name: postgres
-        image: default-route-openshift-image-registry.nebula.sl/text2sql/postgres-populated:latest
+        image: quay.io/jeslynlamxy/postgres-populated:latest
         ports:
         - containerPort: 5432
         env:
