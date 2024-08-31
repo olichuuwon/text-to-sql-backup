@@ -1,5 +1,7 @@
 import os
 import re
+import json
+import configparser
 import streamlit as st
 from sqlalchemy import create_engine, inspect, text
 import pandas as pd
@@ -10,11 +12,8 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.utilities import SQLDatabase
 from langchain_community.llms import Ollama
-
-from sqlalchemy.schema import Table, MetaData
-import pydot
-from graphviz import Source
-
+from graphviz import Digraph
+import base64
 
 # Set the Streamlit page configuration
 st.set_page_config(page_title="LLM Tools", page_icon=":speech_balloon:")
@@ -107,34 +106,76 @@ def display_table_schema(db_uri: str, sample_size: int = 1) -> None:
             st.write(get_sample_data(engine, table_name, sample_size))
 
 
-# Function to generate and display the ERD
-def generate_erd(db_uri: str):
-    engine = create_engine(db_uri)
-    inspector = inspect(engine)
-    metadata = MetaData()
-    metadata.reflect(bind=engine)
+def list_tables_and_columns(engine):
+    with engine.connect() as connection:
+        inspector = inspect(connection)
+        schema = "public"  # Assuming 'public' schema; adjust if using another schema
 
-    # Create a DOT file
-    dot = pydot.Dot(graph_type="digraph")
+        # Dictionary to store table and columns
+        tables_info = {}
 
-    for table_name in inspector.get_table_names():
-        table = Table(table_name, metadata, autoload_with=engine)
-        # Create a node for each table
-        table_node = pydot.Node(table_name, shape="box")
-        dot.add_node(table_node)
+        # Get tables and columns
+        for table_name in inspector.get_table_names(schema=schema):
+            columns = []
+            for column_info in inspector.get_columns(table_name, schema=schema):
+                columns.append(
+                    {
+                        "name": column_info["name"],
+                        "type": column_info["type"],
+                        "nullable": column_info["nullable"],
+                    }
+                )
+            tables_info[table_name] = columns
 
-        # Add relationships (foreign keys)
-        for fk in table.foreign_keys:
-            fk_table = fk.column.table.name
-            fk_node = pydot.Node(fk_table, shape="box")
-            dot.add_node(fk_node)
-            edge = pydot.Edge(table_name, fk_table)
-            dot.add_edge(edge)
+    return tables_info
 
-    # Save the DOT file and render as image
-    dot.write("erd.dot")
-    with open("erd.dot", "r") as file:
-        st.graphviz_chart(file.read())
+
+def list_foreign_keys(engine):
+    with engine.connect() as connection:
+        inspector = inspect(connection)
+        schema = "public"  # Assuming 'public' schema; adjust if using another schema
+
+        # List to store foreign key relationships
+        fk_relationships = []
+
+        # Get tables and their foreign keys
+        for table_name in inspector.get_table_names(schema=schema):
+            foreign_keys = inspector.get_foreign_keys(table_name, schema=schema)
+            for fk in foreign_keys:
+                fk_relationships.append(
+                    (
+                        table_name,
+                        fk["referred_table"],
+                        fk["constrained_columns"],
+                        fk["referred_columns"],
+                    )
+                )
+
+    return fk_relationships
+
+
+def create_er_diagram(tables_info, fk_relationships):
+    dot = Digraph(comment="ERD Diagram", format="png")
+
+    # Create nodes for each table
+    for table, columns in tables_info.items():
+        label = f'<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+        label += f'<TR><TD BGCOLOR="lightgray" COLSPAN="2"><B>{table}</B></TD></TR>'
+
+        for col in columns:
+            col_name = f"<I>{col['name']}</I>" if col["nullable"] else col["name"]
+            col_type = f"{col['type']}"
+            label += f'<TR><TD ALIGN="LEFT">{col_name}</TD><TD ALIGN="LEFT">{col_type}</TD></TR>'
+
+        label += "</TABLE>>"
+        dot.node(table, label=label, shape="plain")
+
+    # Create edges for foreign key relationships
+    for table, ref_table, columns, ref_columns in fk_relationships:
+        for col, ref_col in zip(columns, ref_columns):
+            dot.edge(f"{table}", f"{ref_table}", label=f"{col} -> {ref_col}")
+
+    return dot
 
 
 # Manual SQL Command Execution in the sidebar
@@ -445,6 +486,11 @@ def general_mode_function():
         st.session_state.general_chat_history.append(AIMessage(content=response))
 
 
+def getEngine():
+    # Replace with your actual connection details
+    return create_engine(st.session_state.db_uri)
+
+
 # Main function to run the Streamlit app
 def main():
     if page == general_mode:
@@ -464,7 +510,22 @@ def main():
                 create_engine(st.session_state.db_uri)
                 display_table_schema(st.session_state.db_uri)
                 display_sql_execution(st.session_state.db_uri)
-                generate_erd(st.session_state.db_uri)
+
+                engine = getEngine()
+
+                # Fetch tables and relationships
+                with st.spinner("Reading metadata..."):
+                    tables_info = list_tables_and_columns(engine)
+                    fk_relationships = list_foreign_keys(engine)
+
+                # Create ERD diagram
+                if tables_info:
+                    st.write("## Entity-Relationship Diagram")
+                    er_diagram = create_er_diagram(tables_info, fk_relationships)
+                    st.graphviz_chart(er_diagram.source)
+                else:
+                    st.write("No tables found in the database.")
+
             except Exception as e:
                 st.error(f"Error: {e}")
 
