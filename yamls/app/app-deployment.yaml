@@ -4,7 +4,7 @@ metadata:
   name: streamlit-app
   namespace: text2sql
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: streamlit-app
