@@ -11,6 +11,11 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_community.utilities import SQLDatabase
 from langchain_community.llms import Ollama
 
+from sqlalchemy.schema import Table, MetaData
+import pydot
+from graphviz import Source
+
+
 # Set the Streamlit page configuration
 st.set_page_config(page_title="LLM Tools", page_icon=":speech_balloon:")
 
@@ -100,6 +105,36 @@ def display_table_schema(db_uri: str, sample_size: int = 1) -> None:
             st.write(get_table_schema(engine, table_name))
             st.write("Sample Data:")
             st.write(get_sample_data(engine, table_name, sample_size))
+
+
+# Function to generate and display the ERD
+def generate_erd(db_uri: str):
+    engine = create_engine(db_uri)
+    inspector = inspect(engine)
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+
+    # Create a DOT file
+    dot = pydot.Dot(graph_type="digraph")
+
+    for table_name in inspector.get_table_names():
+        table = Table(table_name, metadata, autoload_with=engine)
+        # Create a node for each table
+        table_node = pydot.Node(table_name, shape="box")
+        dot.add_node(table_node)
+
+        # Add relationships (foreign keys)
+        for fk in table.foreign_keys:
+            fk_table = fk.column.table.name
+            fk_node = pydot.Node(fk_table, shape="box")
+            dot.add_node(fk_node)
+            edge = pydot.Edge(table_name, fk_table)
+            dot.add_edge(edge)
+
+    # Save the DOT file and render as image
+    dot.write("erd.dot")
+    with open("erd.dot", "r") as file:
+        st.graphviz_chart(file.read())
 
 
 # Manual SQL Command Execution in the sidebar
@@ -429,6 +464,7 @@ def main():
                 create_engine(st.session_state.db_uri)
                 display_table_schema(st.session_state.db_uri)
                 display_sql_execution(st.session_state.db_uri)
+                generate_erd(st.session_state.db_uri)
             except Exception as e:
                 st.error(f"Error: {e}")
 
