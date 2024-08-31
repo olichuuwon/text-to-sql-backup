@@ -4,7 +4,7 @@ metadata:
   name: model
   namespace: text2sql
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: model
@@ -16,7 +16,7 @@ spec:
       automountServiceAccountToken: false  # Disable service account token mounting if not needed
       containers:
       - name: model
-        image: jieshilyn/ollama-llama-8b:latest
+        image: default-route-openshift-image-registry.nebula.sl/text2sql/ollama-llama-8b:latest
         ports:
           - containerPort: 11434
         resources:

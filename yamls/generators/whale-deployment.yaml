@@ -13,12 +13,10 @@ spec:
       labels:
         app: whales-stream-2
     spec:
-      imagePullSecrets:
-      - name: my-dockerhub-secret
       automountServiceAccountToken: false
       containers:
         - name: whales-stream-2
-          image: jieshilyn/whales_pg_generator:latest
+          image: default-route-openshift-image-registry.nebula.sl/text2sql/whales_pb_generator:latest
           env:
             - name: FARM
               value: "Farm2"

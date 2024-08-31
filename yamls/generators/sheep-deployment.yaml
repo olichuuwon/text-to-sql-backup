@@ -13,12 +13,10 @@ spec:
       labels:
         app: sheeps-stream-1
     spec:
-      imagePullSecrets:
-      - name: my-dockerhub-secret
       automountServiceAccountToken: false
       containers:
         - name: sheeps-stream-1
-          image: jieshilyn/sheeps_pg_generator:latest
+          image: default-route-openshift-image-registry.nebula.sl/text2sql/sheeps_pb_generator:latest
           env:
             - name: FARM
               value: "Farm1"

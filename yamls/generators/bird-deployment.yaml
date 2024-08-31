@@ -13,12 +13,10 @@ spec:
       labels:
         app: birds-stream-3
     spec:
-      imagePullSecrets:
-      - name: my-dockerhub-secret
       automountServiceAccountToken: false
       containers:
         - name: birds-stream-3
-          image: jieshilyn/birds_pg_generator:latest
+          image: default-route-openshift-image-registry.nebula.sl/text2sql/birds_pb_generator:latest
           env:
             - name: FARM
               value: "Farm3"
