@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: birds-stream-3
-          image: quay.io/jeslynlamxy/birds_pb_generator:latest
+          image: quay.io/jeslynlamxy/birds_pg_generator:latest
           env:
             - name: FARM
               value: "Farm3"
