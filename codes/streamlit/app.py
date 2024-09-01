@@ -1,7 +1,5 @@
 import os
 import re
-import json
-import configparser
 import streamlit as st
 from sqlalchemy import create_engine, inspect, text
 import pandas as pd
@@ -13,7 +11,6 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_community.utilities import SQLDatabase
 from langchain_community.llms import Ollama
 from graphviz import Digraph
-import base64
 
 # Set the Streamlit page configuration
 st.set_page_config(page_title="LLM Tools", page_icon=":speech_balloon:")
@@ -28,46 +25,6 @@ database_mode = "Database Mode"
 general_mode = "General Mode"
 
 page = st.sidebar.selectbox("Select Mode", [database_mode, general_mode])
-
-# Sidebar inputs for database connection, only shown in Database Mode
-if page == "Database Mode":
-    st.sidebar.title("Database Connection Settings")
-    db_host = st.sidebar.text_input("Host", value=os.getenv("DB_HOST", "postgres"))
-    db_port = st.sidebar.text_input("Port", value=os.getenv("DB_PORT", "5432"))
-    db_user = st.sidebar.text_input("User", value=os.getenv("DB_USER", "user"))
-    db_password = st.sidebar.text_input(
-        "Password", value=os.getenv("DB_PASSWORD", "pass"), type="password"
-    )
-    db_name = st.sidebar.text_input("Database", value=os.getenv("DB_NAME", "chinook"))
-
-    # Store connection details in session state
-    if "db_uri" not in st.session_state:
-        st.session_state.db_uri = None
-    if "db" not in st.session_state:
-        st.session_state.db = None
-
-    # Function to get database URI
-    def uri_database(
-        user: str, password: str, host: str, port: str, database: str
-    ) -> str:
-        return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
-
-    # Update session state based on user input
-    st.session_state.db_uri = uri_database(
-        db_user, db_password, db_host, db_port, db_name
-    )
-
-    # Button to manually connect to the database
-    if st.sidebar.button("Connect"):
-        try:
-            engine = create_engine(st.session_state.db_uri)
-            with engine.connect() as connection:
-                st.sidebar.success("Successfully connected to the database!")
-                st.session_state.db = SQLDatabase.from_uri(
-                    st.session_state.db_uri
-                )  # Initialize database connection
-        except Exception as e:
-            st.sidebar.error(f"Failed to connect to database: {e}")
 
 
 # Function to get table schema
@@ -106,10 +63,22 @@ def display_table_schema(db_uri: str, sample_size: int = 1) -> None:
             st.write(get_sample_data(engine, table_name, sample_size))
 
 
+def display_entity_relation_diagram(db_uri: str):
+    engine = create_engine(db_uri)
+    # Fetch tables and relationships
+    with st.spinner("Reading metadata..."):
+        tables_info = list_tables_and_columns(engine)
+        fk_relationships = list_foreign_keys(engine)
+    with st.expander("View Entity Relation Diagram"):
+        # Create diagram
+        er_diagram = create_er_diagram(tables_info, fk_relationships)
+        st.graphviz_chart(er_diagram.source, use_container_width=True)
+
+
 def list_tables_and_columns(engine):
     with engine.connect() as connection:
         inspector = inspect(connection)
-        schema = "public"  # Assuming 'public' schema; adjust if using another schema
+        schema = "public"  # Adjust if using a different schema
 
         # Dictionary to store table and columns
         tables_info = {}
@@ -117,12 +86,17 @@ def list_tables_and_columns(engine):
         # Get tables and columns
         for table_name in inspector.get_table_names(schema=schema):
             columns = []
+            primary_keys = inspector.get_pk_constraint(table_name, schema=schema)[
+                "constrained_columns"
+            ]
             for column_info in inspector.get_columns(table_name, schema=schema):
+                is_primary = column_info["name"] in primary_keys
                 columns.append(
                     {
                         "name": column_info["name"],
                         "type": column_info["type"],
                         "nullable": column_info["nullable"],
+                        "primary_key": is_primary,
                     }
                 )
             tables_info[table_name] = columns
@@ -155,7 +129,7 @@ def list_foreign_keys(engine):
 
 
 def create_er_diagram(tables_info, fk_relationships):
-    dot = Digraph(comment="ERD Diagram", format="png")
+    dot = Digraph(comment="ER Diagram", format="png")
 
     # Create nodes for each table
     for table, columns in tables_info.items():
@@ -163,7 +137,10 @@ def create_er_diagram(tables_info, fk_relationships):
         label += f'<TR><TD BGCOLOR="lightgray" COLSPAN="2"><B>{table}</B></TD></TR>'
 
         for col in columns:
-            col_name = f"<I>{col['name']}</I>" if col["nullable"] else col["name"]
+            col_name = (
+                f"<B><U>{col['name']}</U></B>" if col["primary_key"] else col["name"]
+            )
+            col_name = f"*{col_name}" if col["nullable"] else col_name
             col_type = f"{col['type']}"
             label += f'<TR><TD ALIGN="LEFT">{col_name}</TD><TD ALIGN="LEFT">{col_type}</TD></TR>'
 
@@ -176,6 +153,54 @@ def create_er_diagram(tables_info, fk_relationships):
             dot.edge(f"{table}", f"{ref_table}", label=f"{col} -> {ref_col}")
 
     return dot
+
+
+# Function to validate SQL query
+def is_safe_query(sql_query):
+    # Remove leading/trailing whitespace
+    stripped_query = sql_query.strip()
+
+    # Define forbidden keywords and patterns
+    forbidden_patterns = [
+        r"\bdrop\b",
+        r"\binsert\b",
+        r"\bupdate\b",
+        r"\bdelete\b",
+        r"\bcreate\b",
+        r"\balter\b",
+        r"\btruncate\b",
+        r"\bexec\b",
+        r"\bexecute\b",
+        r"\bxp_cmdshell\b",
+        r"\bunion\b",
+        r"\bjoin\b",
+        r"--",
+        r"#",
+        r"/\*",
+        r"\*/",
+    ]
+
+    # Check for forbidden patterns
+    for pattern in forbidden_patterns:
+        if re.search(pattern, stripped_query, re.IGNORECASE):
+            return False
+
+    # Check for an even number of single quotes (') and double quotes (")
+    if stripped_query.count("'") % 2 != 0 or stripped_query.count('"') % 2 != 0:
+        return False
+
+    # Check to ensure only single statement provided
+    if stripped_query.count(";") > 1:
+        return False
+
+    # Split the query by semicolon and take the first part
+    first_part = stripped_query.split(";", 1)[0].strip()
+
+    # Check if the first part starts with "SELECT"
+    if not re.match(r"^select\s+", first_part, re.IGNORECASE):
+        return False
+
+    return True
 
 
 # Manual SQL Command Execution in the sidebar
@@ -312,7 +337,6 @@ def get_sql_chain(db: SQLDatabase):
     Question: {question}
     SQL Query:
     """
-
     prompt = ChatPromptTemplate.from_template(template)
     llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
 
@@ -384,50 +408,6 @@ def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
             return None
 
 
-# Function to validate SQL query
-def is_safe_query(sql_query):
-    # Remove leading/trailing whitespace
-    stripped_query = sql_query.strip()
-
-    # Define forbidden keywords and patterns
-    forbidden_patterns = [
-        r"\bdrop\b",
-        r"\binsert\b",
-        r"\bupdate\b",
-        r"\bdelete\b",
-        r"\bcreate\b",
-        r"\balter\b",
-        r"\btruncate\b",
-        r"\bexec\b",
-        r"\bexecute\b",
-        r"\bxp_cmdshell\b",
-        r"\bunion\b",
-        r"\bjoin\b",
-        r"--",
-        r"#",
-        r"/\*",
-        r"\*/",
-    ]
-
-    # Check for forbidden patterns
-    for pattern in forbidden_patterns:
-        if re.search(pattern, stripped_query, re.IGNORECASE):
-            return False
-
-    # Check for an even number of single quotes (') and double quotes (")
-    if stripped_query.count("'") % 2 != 0 or stripped_query.count('"') % 2 != 0:
-        return False
-
-    # Split the query by semicolon and take the first part
-    first_part = stripped_query.split(";", 1)[0].strip()
-
-    # Check if the first part starts with "SELECT"
-    if not re.match(r"^select\s+", first_part, re.IGNORECASE):
-        return False
-
-    return True
-
-
 def get_response(user_query, chat_history):
 
     template = """
@@ -486,18 +466,53 @@ def general_mode_function():
         st.session_state.general_chat_history.append(AIMessage(content=response))
 
 
-def getEngine():
-    # Replace with your actual connection details
-    return create_engine(st.session_state.db_uri)
-
-
 # Main function to run the Streamlit app
 def main():
     if page == general_mode:
         general_mode_function()
     elif page == database_mode:
-        # Check the state of 'db' and set is_disabled accordingly
-        is_disabled = st.session_state.db is None  # User locked from doing things
+
+        st.sidebar.title("Database Connection Settings")
+        db_host = st.sidebar.text_input("Host", value=os.getenv("DB_HOST", "postgres"))
+        db_port = st.sidebar.text_input("Port", value=os.getenv("DB_PORT", "5432"))
+        db_user = st.sidebar.text_input("User", value=os.getenv("DB_USER", "user"))
+        db_password = st.sidebar.text_input(
+            "Password", value=os.getenv("DB_PASSWORD", "pass"), type="password"
+        )
+        db_name = st.sidebar.text_input(
+            "Database", value=os.getenv("DB_NAME", "chinook")
+        )
+
+        # Store connection details in session state
+        if "db_uri" not in st.session_state:
+            st.session_state.db_uri = None
+        if "db" not in st.session_state:
+            st.session_state.db = None
+
+        # Function to get database URI
+        def uri_database(
+            user: str, password: str, host: str, port: str, database: str
+        ) -> str:
+            return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+
+        # Update session state based on user input
+        st.session_state.db_uri = uri_database(
+            db_user, db_password, db_host, db_port, db_name
+        )
+
+        # Button to manually connect to the database
+        if st.sidebar.button("Connect"):
+            try:
+                engine = create_engine(st.session_state.db_uri)
+                with engine.connect():
+                    st.sidebar.success("Successfully connected to the database!")
+                    st.session_state.db = SQLDatabase.from_uri(
+                        st.session_state.db_uri
+                    )  # Initialize database connection
+            except Exception as e:
+                st.sidebar.error(f"Failed to connect to database: {e}")
+            # Check the state of 'db' and set is_disabled accordingly
+            is_disabled = st.session_state.db is None  # User locked from doing things
 
         st.title("🐘 Database Mode")
         st.caption(
@@ -507,25 +522,9 @@ def main():
         # Attempt to connect to the database only if the Connect button has been used
         if st.session_state.db is not None:
             try:
-                create_engine(st.session_state.db_uri)
-                display_table_schema(st.session_state.db_uri)
                 display_sql_execution(st.session_state.db_uri)
-
-                engine = getEngine()
-
-                # Fetch tables and relationships
-                with st.spinner("Reading metadata..."):
-                    tables_info = list_tables_and_columns(engine)
-                    fk_relationships = list_foreign_keys(engine)
-
-                # Create ERD diagram
-                if tables_info:
-                    st.write("## Entity-Relationship Diagram")
-                    er_diagram = create_er_diagram(tables_info, fk_relationships)
-                    st.graphviz_chart(er_diagram.source)
-                else:
-                    st.write("No tables found in the database.")
-
+                display_table_schema(st.session_state.db_uri)
+                display_entity_relation_diagram(st.session_state.db_uri)
             except Exception as e:
                 st.error(f"Error: {e}")
 
