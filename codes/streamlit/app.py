@@ -13,7 +13,7 @@ from langchain_community.llms import Ollama
 from graphviz import Digraph
 
 # Set the Streamlit page configuration
-st.set_page_config(page_title="LLM Tools", page_icon=":speech_balloon:")
+st.set_page_config(page_title="LLM Tools", page_icon=":speech_balloon:", layout="wide")
 
 # Load model configurations from environment variables
 MODEL_NAME = os.getenv("MODEL_NAME", "llama3:instruct")
@@ -24,7 +24,7 @@ st.sidebar.title("LLM Tools")
 database_mode = "Database Mode"
 general_mode = "General Mode"
 
-page = st.sidebar.selectbox("Select Mode", [database_mode, general_mode])
+page = st.sidebar.selectbox("Select Mode", [general_mode, database_mode])
 
 
 # Function to get table schema
@@ -511,13 +511,12 @@ def main():
                     )  # Initialize database connection
             except Exception as e:
                 st.sidebar.error(f"Failed to connect to database: {e}")
-            # Check the state of 'db' and set is_disabled accordingly
-            is_disabled = st.session_state.db is None  # User locked from doing things
 
         st.title("🐘 Database Mode")
         st.caption(
             f"Database {'Connected' if st.session_state.db else 'Not Connected'}"
         )
+        is_disabled = st.session_state.db is None  # User locked from doing things
 
         # Attempt to connect to the database only if the Connect button has been used
         if st.session_state.db is not None:
