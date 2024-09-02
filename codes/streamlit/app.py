@@ -18,9 +18,6 @@ The script uses the following libraries:
 - langchain_core: for natural language processing tasks
 - langchain_community: for additional utilities and models
 - graphviz: for creating entity relation diagrams
-
-The main function of the script is `main()`, which runs the Streamlit application based on the selected mode.
-Note: The script requires the PostgreSQL database connection details to be provided in the sidebar before connecting to the database.
 """
 
 import os
@@ -260,7 +257,7 @@ def create_er_diagram(tables_info, fk_relationships):
     # Create nodes for each table
     for table, columns in tables_info.items():
         # Start the HTML-like label for the table node
-        label = f'<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
+        label = '<<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0">'
         label += f'<TR><TD BGCOLOR="lightgray" COLSPAN="2"><B>{table}</B></TD></TR>'
 
         # Add each column to the table node
@@ -537,7 +534,8 @@ def get_natural_language_chain(db: SQLDatabase):
         db (SQLDatabase): The SQLDatabase object to interact with the database.
 
     Returns:
-        Runnable: A runnable chain that processes the SQL query and its result to generate a human-readable response.
+        Runnable: A runnable chain that processes the SQL query
+        and its result to generate a human-readable response.
     """
     # Template for generating a human-readable response
     template = """
@@ -580,7 +578,8 @@ def get_natural_language_chain(db: SQLDatabase):
 
 def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
     """
-    Generate an SQL query based on the user's question, execute it, and provide a natural language response.
+    Generate an SQL query based on the user's question,
+    execute it, and provide a natural language response.
 
     Args:
         user_query (str): The user's question.
@@ -588,8 +587,11 @@ def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
         chat_history (list): The conversation history.
 
     Returns:
-        tuple: A tuple containing the SQL query, the result DataFrame, and the natural language response.
-               Returns None if the query is not safe.
+        tuple: A tuple containing the SQL query,
+        the result DataFrame,
+        and the natural language response.
+
+    Returns None if the query is not safe.
     """
     with st.spinner():
         # First, run the SQL generation chain
@@ -616,8 +618,7 @@ def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
             )
 
             return sql_query, result_df, natural_language_response
-        else:
-            return None
+        return None
 
 
 def get_response(user_query, chat_history):
@@ -631,7 +632,8 @@ def get_response(user_query, chat_history):
     Returns:
         str: The natural language response.
     """
-    # Template for generating a natural language response based on the user's question and conversation history
+    # Template for generating a natural language response
+    # Based on the user's question and conversation history
     template = """
     You are a helpful assistant. Answer the following questions considering the history of the conversation:
 
@@ -662,7 +664,9 @@ def general_mode_function():
     """
     Function for the general chat page in the Streamlit app.
 
-    This function initializes the chat history, displays the chat messages, and handles user input to generate responses.
+    This function initializes the chat history,
+    displays the chat messages,
+    and handles user input to generate responses.
 
     Returns:
         None
@@ -714,9 +718,39 @@ def database_mode_function():
         None
     """
     st.title("🐘 Database Mode")
-    st.caption(f"Database {'Connected' if st.session_state.db else 'Not Connected'}")
-    is_disabled = st.session_state.db is None  # User locked from doing things
+    initialize_session_state()
+    display_connection_settings()
+    handle_database_connection()
+    display_database_info()
+    initialize_chat_history()
+    display_chat_history()
+    handle_user_query()
 
+
+def initialize_session_state():
+    """
+    Initializes the session state by checking if the 'db_uri' and 'db' variables are present in the session state.
+    If they are not present, they are set to None.
+
+    Parameters:
+        None
+
+    Returns:
+        None
+    """
+    if "db_uri" not in st.session_state:
+        st.session_state.db_uri = None
+    if "db" not in st.session_state:
+        st.session_state.db = None
+
+
+def display_connection_settings():
+    """
+    Displays the current database connection settings and allows the user to modify them.
+    Returns:
+        None
+    """
+    st.caption(f"Database {'Connected' if st.session_state.db else 'Not Connected'}")
     st.sidebar.title("Database Connection Settings")
     db_host = st.sidebar.text_input("Host", value=os.getenv("DB_HOST", "postgres"))
     db_port = st.sidebar.text_input("Port", value=os.getenv("DB_PORT", "5432"))
@@ -726,36 +760,60 @@ def database_mode_function():
     )
     db_name = st.sidebar.text_input("Database", value=os.getenv("DB_NAME", "chinook"))
 
-    # Store connection details in session state
-    if "db_uri" not in st.session_state:
-        st.session_state.db_uri = None
-    if "db" not in st.session_state:
-        st.session_state.db = None
-
-    # Function to get database URI
-    def uri_database(
-        user: str, password: str, host: str, port: str, database: str
-    ) -> str:
-        return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
-
-    # Update session state based on user input
     st.session_state.db_uri = uri_database(
         db_user, db_password, db_host, db_port, db_name
     )
 
-    # Button to manually connect to the database
+
+def uri_database(user: str, password: str, host: str, port: str, database: str) -> str:
+    """
+    Generates a PostgreSQL URI based on the provided parameters.
+
+    Args:
+        user (str): The username for the database connection.
+        password (str): The password for the database connection.
+        host (str): The host address of the database server.
+        port (str): The port number of the database server.
+        database (str): The name of the database.
+
+    Returns:
+        str: The PostgreSQL URI for the database connection.
+    """
+    return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+
+
+def handle_database_connection():
+    """
+    Handles the database connection based on the user's input.
+
+    Returns:
+        None
+    """
     if st.sidebar.button("Connect"):
         try:
             engine = create_engine(st.session_state.db_uri)
             with engine.connect():
                 st.sidebar.success("Successfully connected to the database!")
-                st.session_state.db = SQLDatabase.from_uri(
-                    st.session_state.db_uri
-                )  # Initialize database connection
+                st.session_state.db = SQLDatabase.from_uri(st.session_state.db_uri)
         except Exception as e:
             st.sidebar.error(f"Failed to connect to database: {e}")
 
-    # Attempt to connect to the database only if the Connect button has been used
+
+def display_database_info():
+    """
+    Displays information about the database.
+
+    If the `db` attribute in the `st.session_state` is not None, this function
+    will attempt to display the SQL execution, table schema, and entity relation
+    diagram for the database specified by the `db_uri` attribute in the
+    `st.session_state`. If any exception occurs during the process, an error
+    message will be displayed.
+
+    Raises:
+        Exception: If any error occurs during the process of displaying the
+            database information.
+
+    """
     if st.session_state.db is not None:
         try:
             display_sql_execution(st.session_state.db_uri)
@@ -764,7 +822,19 @@ def database_mode_function():
         except Exception as e:
             st.error(f"Error: {e}")
 
-    # Initialize chat history in session state if not already done
+
+def initialize_chat_history():
+    """
+    Initializes the chat history for the database.
+
+    If the 'database_chat_history' key is not present in the session state, it adds an initial message to the chat history.
+
+    Parameters:
+        None
+
+    Returns:
+        None
+    """
     if "database_chat_history" not in st.session_state:
         st.session_state.database_chat_history = [
             AIMessage(
@@ -772,9 +842,33 @@ def database_mode_function():
             ),
         ]
 
-    # Viewing and rendering chat history
+
+def display_chat_history():
+    """
+    Displays the chat history in the Streamlit app.
+
+    This function iterates through the chat history stored in the `database_chat_history` list
+    and displays each message in the Streamlit app. The messages are categorized as either
+    AI messages or Human messages.
+
+    AI messages are displayed with the label "AI" and their content is rendered using Markdown.
+    If the content is a string, it is displayed as is. If the content is a tuple containing a SQL query
+    and a natural language response, the SQL query is displayed as code and the natural language
+    response is displayed as plain text.
+
+    Human messages are displayed with the label "Human" and their content is rendered using Markdown.
+
+    Note:
+    - The chat history is stored in the `database_chat_history` list.
+    - The `st` object is assumed to be available and is used to display the messages in the Streamlit app.
+    - The `AIMessage` and `HumanMessage` classes are assumed to be defined elsewhere.
+
+    Example usage:
+    ```
+    display_chat_history()
+    ```
+    """
     if st.session_state.db is not None:
-        # Display chat history
         for message in st.session_state.database_chat_history:
             if isinstance(message, AIMessage):
                 with st.chat_message("AI"):
@@ -788,10 +882,26 @@ def database_mode_function():
                 with st.chat_message("Human"):
                     st.markdown(message.content)
 
-    # Input for user query
+
+def handle_user_query():
+    """
+    Handles the user query in the chat interface.
+    This function takes the user's input message and processes it to generate a response. It performs the following steps:
+    1. Checks if the database connection is available.
+    2. Appends the user's message to the chat history.
+    3. Displays the user's message in the chat interface.
+    4. Generates a response using the `get_combined_response` function.
+    5. Checks if the response is valid.
+    6. Displays the SQL query, SQL response, and natural language response in the chat interface.
+    7. Appends the generated response to the chat history.
+    If the database connection is not available, an error message is displayed.
+    Raises:
+        Exception: If there is an error generating the response.
+    """
+    # code implementation goes here
+    is_disabled = st.session_state.db is None
     user_query = st.chat_input("Type your message here...", disabled=is_disabled)
     if user_query is not None and user_query.strip() != "":
-
         st.session_state.database_chat_history.append(HumanMessage(content=user_query))
         with st.chat_message("Human"):
             st.markdown(user_query)
@@ -799,7 +909,6 @@ def database_mode_function():
         with st.chat_message("AI"):
             try:
                 if st.session_state.db is not None:
-
                     result = get_combined_response(
                         user_query,
                         st.session_state.db,
@@ -812,7 +921,6 @@ def database_mode_function():
                         st.session_state.database_chat_history.append(
                             AIMessage(content=invalid_generation)
                         )
-
                     else:
                         sql_query, sql_response, natural_language_response = result
                         st.code(sql_query)
@@ -820,14 +928,10 @@ def database_mode_function():
                         natural_language_full = st.write_stream(
                             natural_language_response
                         )
-                        stored = [
-                            sql_query,
-                            natural_language_full,
-                        ]
+                        stored = [sql_query, natural_language_full]
                         st.session_state.database_chat_history.append(
                             AIMessage(content=stored)
                         )
-
                 else:
                     st.error("Please connect to the database first.")
             except Exception as e:
