@@ -393,239 +393,6 @@ def display_sql_execution(db_uri: str) -> None:
                 )
 
 
-def get_sql_chain(db: SQLDatabase):
-    """
-    Generates an SQL query based on a user's question and the conversation history.
-
-    Args:
-        db (SQLDatabase): The SQL database object.
-
-    Returns:
-        RunnablePassthrough: The SQL query generator pipeline.
-    """
-    # Template for generating SQL queries based on user questions and conversation history
-    template = """
-    ### Instructions:
-    Your task is to convert a question into a SQL query, given a Postgres database schema.
-    Adhere to these rules:
-    1. The current time in the database is in epoch/UTC format, so remember to convert it to UTC+8.
-    2. Convert epoch timestamps to UTC+8 by adding 28,800 seconds (8 hours) to the epoch value. This will adjust the time from UTC to the desired UTC+8 timezone.
-    3. Prioritize the use of `SELECT` statements with explicit column names.
-    4. Avoid the use of `UNION` and `JOIN` operations. Structure queries to work without these constructs to maintain simplicity and efficiency.
-    5. Limit the result set to a maximum of 1000 rows to prevent large data returns.
-    6. Use Table Aliases to prevent ambiguity. For example, `SELECT table1.col1, table2.col1 FROM table1 JOIN table2 ON table1.id = table2.id`.
-    7. Avoid using constructs not supported by PostgreSQL, such as `CROSS APPLY`.
-    8. Handle null values and ensure to include conditions that maintain data integrity in filters.
-    9. Ensure that aggregation functions (e.g., `COUNT`, `SUM`, `AVG`) are used with `GROUP BY` clauses when necessary.
-    10. The syntax for the random function in PostgreSQL is: `random()`. 
-    11. For geospatial distance calculations, ONLY use the Haversine formula with standard SQL functions such as `COS`, `SIN`, `RADIANS`, and `ACOS`.
-    12. When calculating distances, use 6371 as the Earth's radius in kilometers.
-    13. Calculate the distance directly in the SQL query using the Haversine formula. Do not use external libraries or functions.
-    
-    Haversine Formula:
-        6371 * ACOS(
-        COS(RADIANS(1.3521)) * COS(RADIANS(latitude_column)) * COS(RADIANS(longitude_column) - RADIANS(103.8198)) +
-        SIN(RADIANS(1.3521)) * SIN(RADIANS(latitude_column))
-
-    <SCHEMA>{schema}</SCHEMA>
-
-    ### Input:
-    Format:
-    Write only the SQL query and nothing else.
-    Do not wrap the SQL query in any other text, not even backticks.
-    Do not reply to the user, and only respond with SQL queries.
-
-    For example:
-
-    Question: Find all records from the bird_locations table where the bird's location is within an 8888 km radius of a specific home location (Latitude: 1.3521, Longitude: 103.8198).
-    SQL Query: SELECT * FROM bird_locations WHERE ( 6371 * ACOS( COS(RADIANS(1.3521)) * COS(RADIANS(latitude)) * COS(RADIANS(longitude) - RADIANS(103.8198)) + SIN(RADIANS(1.3521)) * SIN(RADIANS(latitude)) ) ) <= 8888;
-
-    Question: Which 3 genres have the most tracks?
-    SQL Query: SELECT g."Name" AS GenreName, COUNT(*) AS track_count FROM "Track" t JOIN "Genre" g ON t."GenreId" = g."GenreId" GROUP BY g."Name" ORDER BY track_count DESC LIMIT 3;
-
-    Question: Name 10 playlists.
-    SQL Query: SELECT "Name" FROM "Playlist" LIMIT 10;
-
-    Question: What are the 5 most recent invoices?
-    SQL Query: SELECT * FROM "Invoice" ORDER BY "InvoiceDate" DESC LIMIT 5;
-
-    Question: List the names and titles of employees and their managers.
-    SQL Query: SELECT e1."FirstName" AS EmployeeFirstName, e1."LastName" AS EmployeeLastName, e1."Title" AS EmployeeTitle, e2."FirstName" AS ManagerFirstName, e2."LastName" AS ManagerLastName, e2."Title" AS ManagerTitle FROM "Employee" e1 LEFT JOIN "Employee" e2 ON e1."ReportsTo" = e2."EmployeeId";
-
-    Question: What is the average unit price of tracks by genre?
-    SQL Query: SELECT g."Name" AS GenreName, AVG(t."UnitPrice") AS AverageUnitPrice FROM "Track" t JOIN "Genre" g ON t."GenreId" = g."GenreId" GROUP BY g."Name" ORDER BY AverageUnitPrice DESC;
-
-    Question: How many albums does each artist have?
-    SQL Query: SELECT a."ArtistId", a."Name" AS ArtistName, COUNT(al."AlbumId") AS AlbumCount FROM "Artist" a JOIN "Album" al ON a."ArtistId" = al."ArtistId" GROUP BY a."ArtistId", a."Name" ORDER BY AlbumCount DESC;
-
-    Question: List all customers from Canada.
-    SQL Query: SELECT "CustomerId", "FirstName", "LastName", "Email" FROM "Customer" WHERE "Country" = 'Canada';
-
-    Question: What is the total sales for each customer?
-    SQL Query: SELECT c."CustomerId", c."FirstName", c."LastName", SUM(i."Total") AS TotalSales FROM "Customer" c JOIN "Invoice" i ON c."CustomerId" = i."CustomerId" GROUP BY c."CustomerId", c."FirstName", c."LastName" ORDER BY TotalSales DESC;
-
-    Question: List the names of tracks that are longer than 5 minutes.
-    SQL Query: SELECT "Name" FROM "Track" WHERE "Milliseconds" > 300000;
-
-    Question: List the titles of albums by AC/DC.
-    SQL Query: SELECT al."Title" FROM "Album" al JOIN "Artist" a ON al."ArtistId" = a."ArtistId" WHERE a."Name" = 'AC/DC';
-
-    Question: What are the 5 most recent invoices in UTC?
-    SQL Query: SELECT *, "InvoiceDate" AT TIME ZONE 'UTC' AS "InvoiceDate_UTC" FROM "Invoice" ORDER BY "InvoiceDate_UTC" DESC LIMIT 5;
-
-    Question: How many tracks are longer than 5 minutes?
-    SQL Query: SELECT COUNT(*) FROM "Track" WHERE "Milliseconds" > 300000;
-
-    Question: Get the first 100,000 rows from the track details.
-    SQL Query: SELECT * FROM "Track" LIMIT 100000;
-
-    Question: Show the total sales for each customer without using joins.
-    SQL Query: SELECT "Customer"."CustomerId", "Customer"."FirstName", "Customer"."LastName", (SELECT SUM("Invoice"."Total") FROM "Invoice" WHERE "Invoice"."CustomerId" = "Customer"."CustomerId") AS TotalSales FROM "Customer" LIMIT 100000;
-
-    Question: What is the total number of tracks in each media type?
-    SQL Query: SELECT m."Name" AS MediaTypeName, COUNT(t."TrackId") AS TrackCount FROM "Track" t JOIN "MediaType" m ON t."MediaTypeId" = m."MediaTypeId" GROUP BY m."Name" ORDER BY TrackCount DESC;
-
-    Question: List all artists who have more than 5 albums.
-    SQL Query: SELECT a."Name" AS ArtistName, COUNT(al."AlbumId") AS AlbumCount FROM "Artist" a JOIN "Album" al ON a."ArtistId" = al."ArtistId" GROUP BY a."Name" HAVING COUNT(al."AlbumId") > 5;
-
-    Question: What are the most popular playlists (with the most tracks)?
-    SQL Query: SELECT p."Name" AS PlaylistName, COUNT(pt."TrackId") AS TrackCount FROM "Playlist" p JOIN "PlaylistTrack" pt ON p."PlaylistId" = pt."PlaylistId" GROUP BY p."Name" ORDER BY TrackCount DESC;
-
-    Question: Find the average number of tracks per album.
-    SQL Query: SELECT AVG(TrackCount) AS AvgTracksPerAlbum FROM (SELECT COUNT(*) AS TrackCount FROM "Track" GROUP BY "AlbumId") AS AlbumTracks;
-
-    Question: List all customers who have never made a purchase.
-    SQL Query: SELECT "CustomerId", "FirstName", "LastName", "Email" FROM "Customer" WHERE "CustomerId" NOT IN (SELECT DISTINCT "CustomerId" FROM "Invoice");
-
-    Once again remember:
-    Write only the SQL query and nothing else.
-    Do not wrap the SQL query in any other text, not even backticks.
-    Do not reply to the user, and only respond with SQL queries.
-
-    Your turn:
-    
-    Question: {question}
-    SQL Query:
-    """
-    # Create a prompt template from the provided template
-    prompt = ChatPromptTemplate.from_template(template)
-
-    # Initialize the language model with the specified model name and base URL
-    llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
-
-    def get_schema(_):
-        """
-        Retrieve the schema information from the database.
-
-        Args:
-            _ : Placeholder argument for compatibility.
-
-        Returns:
-            dict: The schema information of the database.
-        """
-        return db.get_table_info()
-
-    # Create a runnable chain that assigns the schema, processes the prompt, and parses the output
-    return (
-        RunnablePassthrough.assign(schema=get_schema) | prompt | llm | StrOutputParser()
-    )
-
-
-def get_natural_language_chain(db: SQLDatabase):
-    """
-    Create a chain to generate a natural language response based on a SQL query and its result.
-
-    Args:
-        db (SQLDatabase): The SQLDatabase object to interact with the database.
-
-    Returns:
-        Runnable: A runnable chain that processes the SQL query
-        and its result to generate a human-readable response.
-    """
-    # Template for generating a human-readable response
-    template = """
-    You are a data analyst at a company. You have been provided with a SQL query and its result.
-    Based on this information, generate a human-readable response. Take the conversation history into account.
-    
-    <SCHEMA>{schema}</SCHEMA>
-    
-    Conversation History: {chat_history}
-    
-    SQL Query: <SQL>{query}</SQL>
-    SQL Response: {response}
-    
-    Provide a summary of the SQL results in plain language for the user.
-    """
-
-    # Create a prompt template from the provided template
-    prompt = ChatPromptTemplate.from_template(template)
-
-    # Initialize the language model with the specified model name and base URL
-    llm = Ollama(model=MODEL_NAME, base_url=MODEL_BASE_URL, verbose=True)
-
-    def get_schema(_):
-        """
-        Retrieve the schema information from the database.
-
-        Args:
-            _ : Placeholder argument for compatibility.
-
-        Returns:
-            dict: The schema information of the database.
-        """
-        return db.get_table_info()
-
-    # Create a runnable chain that assigns the schema, processes the prompt, and parses the output
-    return (
-        RunnablePassthrough.assign(schema=get_schema) | prompt | llm | StrOutputParser()
-    )
-
-
-def get_combined_response(user_query: str, db: SQLDatabase, chat_history: list):
-    """
-    Generate an SQL query based on the user's question,
-    execute it, and provide a natural language response.
-
-    Args:
-        user_query (str): The user's question.
-        db (SQLDatabase): The SQL database object.
-        chat_history (list): The conversation history.
-
-    Returns:
-        tuple: A tuple containing the SQL query,
-        the result DataFrame,
-        and the natural language response.
-
-    Returns None if the query is not safe.
-    """
-    with st.spinner():
-        # First, run the SQL generation chain
-        sql_chain = get_sql_chain(db)
-        sql_query = sql_chain.invoke(
-            {"question": user_query, "chat_history": chat_history}
-        )
-
-        print(sql_query)
-        if is_safe_query(sql_query):
-            # Execute the SQL query
-            engine = create_engine(st.session_state.db_uri)
-            with engine.connect() as connection:
-                result_df = pd.read_sql(sql_query, connection)
-
-            # Then, run the Natural Language chain
-            nl_chain = get_natural_language_chain(db)
-            natural_language_response = nl_chain.stream(
-                {
-                    "query": sql_query,
-                    "response": result_df,
-                    "chat_history": chat_history,
-                }
-            )
-
-            return sql_query, result_df, natural_language_response
-        return None
-
-
 def get_response(user_query, chat_history):
     """
     Generate a natural language response based on the user's question and the conversation history.
@@ -727,9 +494,52 @@ def database_mode_function():
     display_connection_settings()
     handle_database_connection()
     display_database_info()
-    initialize_chat_history()
-    display_chat_history()
-    handle_user_query()
+    st.write_stream(get_sql_query_from_model_through_user_input())
+
+
+def get_sql_query_from_model_through_user_input():
+    """
+    Get the SQL query from the model through user input.
+
+    Returns:
+        str: The SQL query generated by the model based on user input.
+    """
+    # Template for generating a natural language response
+    # Based on the user's question and conversation history
+    template = """
+    ### Task
+    Generate a SQL query to answer the following question:
+    `{user_question}`
+
+    ### Database Schema
+    The query will run on a database with the following schema:
+    {table_metadata_string}
+
+    ### Answer
+    Given the database schema, here is the SQL query that answers `{user_question}`:
+    ```
+    """
+
+    user_question = input("Please enter your question: ")
+
+    table_metadata_string = st.session_state.db.get_table_info()
+
+    # Create a prompt template from the provided template
+    prompt = ChatPromptTemplate.from_template(template)
+
+    # Initialize the language model with the specified model name and base URL
+    llm = Ollama(model="sqlcoder", base_url=MODEL_BASE_URL, verbose=True)
+
+    # Create a chain that processes the prompt and parses the output
+    chain = prompt | llm | StrOutputParser()
+
+    # Invoke the chain with the user's question and conversation history
+    return chain.stream(
+        {
+            "user_question": user_question,
+            "table_metadata_string": table_metadata_string,
+        }
+    )
 
 
 def initialize_session_state():
@@ -826,121 +636,6 @@ def display_database_info():
             display_entity_relation_diagram(st.session_state.db_uri)
         except Exception as e:
             st.error(f"Error: {e}")
-
-
-def initialize_chat_history():
-    """
-    Initializes the chat history for the database.
-
-    If the 'database_chat_history' key is not present in the session state, it adds an initial message to the chat history.
-
-    Parameters:
-        None
-
-    Returns:
-        None
-    """
-    if "database_chat_history" not in st.session_state:
-        st.session_state.database_chat_history = [
-            AIMessage(
-                content="Hello! Feel free to ask me anything about your database."
-            ),
-        ]
-
-
-def display_chat_history():
-    """
-    Displays the chat history in the Streamlit app.
-
-    This function iterates through the chat history stored in the `database_chat_history` list
-    and displays each message in the Streamlit app. The messages are categorized as either
-    AI messages or Human messages.
-
-    AI messages are displayed with the label "AI" and their content is rendered using Markdown.
-    If the content is a string, it is displayed as is. If the content is a tuple containing a SQL query
-    and a natural language response, the SQL query is displayed as code and the natural language
-    response is displayed as plain text.
-
-    Human messages are displayed with the label "Human" and their content is rendered using Markdown.
-
-    Note:
-    - The chat history is stored in the `database_chat_history` list.
-    - The `st` object is assumed to be available and is used to display the messages in the Streamlit app.
-    - The `AIMessage` and `HumanMessage` classes are assumed to be defined elsewhere.
-
-    Example usage:
-    ```
-    display_chat_history()
-    ```
-    """
-    if st.session_state.db is not None:
-        for message in st.session_state.database_chat_history:
-            if isinstance(message, AIMessage):
-                with st.chat_message("AI"):
-                    if isinstance(message.content, str):
-                        st.markdown(message.content)
-                    else:
-                        sql_query, natural_language_response = message.content
-                        st.code(sql_query)
-                        st.write(natural_language_response)
-            elif isinstance(message, HumanMessage):
-                with st.chat_message("Human"):
-                    st.markdown(message.content)
-
-
-def handle_user_query():
-    """
-    Handles the user query in the chat interface.
-    This function takes the user's input message and processes it to generate a response. It performs the following steps:
-    1. Checks if the database connection is available.
-    2. Appends the user's message to the chat history.
-    3. Displays the user's message in the chat interface.
-    4. Generates a response using the `get_combined_response` function.
-    5. Checks if the response is valid.
-    6. Displays the SQL query, SQL response, and natural language response in the chat interface.
-    7. Appends the generated response to the chat history.
-    If the database connection is not available, an error message is displayed.
-    Raises:
-        Exception: If there is an error generating the response.
-    """
-    # code implementation goes here
-    is_disabled = st.session_state.db is None
-    user_query = st.chat_input("Type your message here...", disabled=is_disabled)
-    if user_query is not None and user_query.strip() != "":
-        st.session_state.database_chat_history.append(HumanMessage(content=user_query))
-        with st.chat_message("Human"):
-            st.markdown(user_query)
-
-        with st.chat_message("AI"):
-            try:
-                if st.session_state.db is not None:
-                    result = get_combined_response(
-                        user_query,
-                        st.session_state.db,
-                        st.session_state.database_chat_history,
-                    )
-
-                    if result is None:
-                        invalid_generation = "Only single SELECT statements are allowed. The use of harmful keywords such as UNION, DROP, INSERT, UPDATE, DELETE, CREATE, ALTER, TRUNCATE, EXEC, EXECUTE, and XP_CMDSHELL, as well as comments (e.g., --, #, / /) or mismatched quotes, is prohibited."
-                        st.write(invalid_generation)
-                        st.session_state.database_chat_history.append(
-                            AIMessage(content=invalid_generation)
-                        )
-                    else:
-                        sql_query, sql_response, natural_language_response = result
-                        st.code(sql_query)
-                        st.dataframe(sql_response)
-                        natural_language_full = st.write_stream(
-                            natural_language_response
-                        )
-                        stored = [sql_query, natural_language_full]
-                        st.session_state.database_chat_history.append(
-                            AIMessage(content=stored)
-                        )
-                else:
-                    st.error("Please connect to the database first.")
-            except Exception as e:
-                st.error(f"Error generating response: {e}")
 
 
 # Main function to run the Streamlit app

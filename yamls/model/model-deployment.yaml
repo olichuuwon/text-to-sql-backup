@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: model
-        image: quay.io/jeslynlamxy/ollama-llama-8b:latest
+        image: quay.io/jeslynlamxy/ollama-models:latest
         ports:
           - containerPort: 11434
         resources:
