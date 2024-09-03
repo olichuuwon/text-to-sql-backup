@@ -18,7 +18,6 @@ The script uses the following libraries:
 import os
 import re
 import streamlit as st
-import streamlit.components.v1 as components
 from sqlalchemy import create_engine, inspect, text
 import pandas as pd
 from prettytable import PrettyTable
@@ -29,59 +28,6 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_community.utilities import SQLDatabase
 from langchain_community.llms import Ollama
 from graphviz import Digraph
-
-import streamlit as st
-import jwt  # Import the JWT library
-from jwt import DecodeError, ExpiredSignatureError
-import requests
-import json
-
-CLIENT_ID = "flask_client"
-CLIENT_SECRET = "fxAtVg6qe1eh78V4NurL3SeSNm2v8tUD"
-KEYCLOAK_URL = "https://keycloak.nebula.sl"
-REALM = "text2sql"
-REDIRECT_URI = "http://streamlit-app-text2sql.apps.nebula.sl"
-
-# State management for Streamlit
-if "auth_code" not in st.session_state:
-    st.session_state.auth_code = None
-
-if "access_token" not in st.session_state:
-    st.session_state.access_token = None
-
-if "decoded_token" not in st.session_state:
-    st.session_state.decoded_token = None
-
-
-# Fetch the public key from Keycloak for JWT verification
-def get_keycloak_public_key():
-    well_known_url = f"{KEYCLOAK_URL}/realms/{REALM}/.well-known/openid-configuration"
-    response = requests.get(well_known_url, verify=False)
-
-    if response.status_code != 200:
-        st.error(f"Failed to fetch well-known config: {response.text}")
-        st.stop()
-
-    jwks_uri = response.json().get("jwks_uri")
-    jwks_response = requests.get(jwks_uri, verify=False)
-
-    if jwks_response.status_code != 200:
-        st.error(f"Failed to fetch JWKS keys: {jwks_response.text}")
-        st.stop()
-
-    jwks_keys = jwks_response.json().get("keys")
-
-    # Assuming only one key is used for signing
-    if not jwks_keys or len(jwks_keys) == 0:
-        st.error("No JWKS keys found")
-        st.stop()
-
-    rsa_key = jwks_keys[0]  # Directly using the first key
-
-    # Convert JWKS to PEM format key
-    public_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(rsa_key))
-
-    return public_key
 
 
 # Set the Streamlit page configuration
@@ -94,89 +40,10 @@ MODEL_BASE_URL = os.getenv("MODEL_BASE_URL", "http://model:11434")
 DATABASE_MODE = "Database Mode"
 GENERAL_MODE = "General Mode"
 
-# # Handle authorization code after redirect
-# params = st.query_params
-# if "code" in params and st.session_state.auth_code is None:
-#     st.session_state.auth_code = params["code"]
-#     # st.query_params.clear()
-#     st.rerun()
-
-# if st.session_state.auth_code is None:
-#     # Automatically redirect to Keycloak for authentication
-#     auth_url = (
-#         f"{KEYCLOAK_URL}/realms/{REALM}/protocol/openid-connect/auth"
-#         f"?client_id={CLIENT_ID}&response_type=code"
-#         f"&redirect_uri={REDIRECT_URI}&scope=openid"
-#     )
-#     st.write("Redirecting to Keycloak for authentication...")
-#     # st.experimental_set_query_params()  # Clear query params before redirecting
-#     st.markdown(
-#         f'<meta http-equiv="refresh" content="0; url={auth_url}">',
-#         unsafe_allow_html=True,
-#     )
-#     st.stop()
-
-# else:
-#     # st.write(f"Authorization code received: {st.session_state.auth_code}")
-
-#     # Exchange the authorization code for an access token
-#     token_url = f"{KEYCLOAK_URL}/realms/{REALM}/protocol/openid-connect/token"
-#     payload = {
-#         "client_id": CLIENT_ID,
-#         "client_secret": CLIENT_SECRET,
-#         "grant_type": "authorization_code",
-#         "code": st.session_state.auth_code,
-#         "redirect_uri": REDIRECT_URI,
-#     }
-
-#     response = requests.post(token_url, data=payload, verify=False)
-
-#     # Log the response for debugging
-#     # st.write(f"Token exchange response status: {response.status_code}")
-
-#     if response.status_code == 200:
-#         token_info = response.json()
-#         st.session_state.access_token = token_info.get("access_token")
-#         # st.write(f"Access Token: {st.session_state.access_token}")
-
-#         # Decode the JWT using the public key
-#         try:
-#             public_key = get_keycloak_public_key()
-#             decoded_token = jwt.decode(
-#                 st.session_state.access_token,
-#                 key=public_key,
-#                 algorithms=["RS256"],
-#                 options={"verify_aud": False},  # Disable audience verification
-#             )
-#             # st.write("Decoded Token:", decoded_token)
-#             st.session_state.decoded_token = decoded_token
-#             st.query_params.clear()
-
-#             # pretty_decoded_token = json.dumps(decoded_token, indent=4)
-#             # st.code(pretty_decoded_token)
-
-#         except ExpiredSignatureError:
-#             st.error("Token has expired")
-#         except DecodeError:
-#             st.error("Token decode error")
-#         except Exception as e:
-#             st.error(f"An error occurred: {str(e)}")
-#     else:
-#         error_message = response.json().get("error_description", "Unknown error")
-#         st.error(
-#             f"Failed to obtain access token: {response.status_code} {error_message}"
-#         )
-#         st.session_state.auth_code = None  # Clear auth_code on error
-#         st.rerun()  # Reset the flow on error
-
 
 # Sidebar for mode selection
 # Dropdown to select the mode
 st.sidebar.title("LLM Tools")
-if st.session_state.decoded_token:
-    decoded_token = st.session_state.decoded_token
-    welcome_string = "Hello, " + decoded_token["preferred_username"] + "!"
-    st.sidebar.caption(welcome_string)
 page = st.sidebar.selectbox("Select Mode", [GENERAL_MODE, DATABASE_MODE])
 
 
@@ -538,32 +405,40 @@ def get_sql_chain(db: SQLDatabase):
     """
     # Template for generating SQL queries based on user questions and conversation history
     template = """
-    You are a data analyst at a company. You are interacting with a user who is asking you questions about the company's database.
-    Based on the table schema below, write a PostgresSQL query that would answer the user's question. Take the conversation history into account.
-    
-    <SCHEMA>{schema}</SCHEMA>
-    
-    Conversation History: {chat_history}
-
-    Instructions:
-
-    1. Use UTC timing for any date or time calculations; avoid using UTC+8.
-    2. Convert epoch timestamps to UTC timing if necessary.
-    3. Prioritize the use of `SELECT` statements with explicit column names; use "*" only when all columns are required.
+    ### Instructions:
+    Your task is to convert a question into a SQL query, given a Postgres database schema.
+    Adhere to these rules:
+    1. The current time in the database is in epoch/UTC format, so remember to convert it to UTC+8.
+    2. Convert epoch timestamps to UTC+8 by adding 28,800 seconds (8 hours) to the epoch value. This will adjust the time from UTC to the desired UTC+8 timezone.
+    3. Prioritize the use of `SELECT` statements with explicit column names.
     4. Avoid the use of `UNION` and `JOIN` operations. Structure queries to work without these constructs to maintain simplicity and efficiency.
-    5. Limit the result set to a maximum of 100,000 rows to prevent large data returns.
-    6. Always use explicit table names or aliases when referencing columns to prevent ambiguity, especially if the column name exists in multiple tables.
+    5. Limit the result set to a maximum of 1000 rows to prevent large data returns.
+    6. Use Table Aliases to prevent ambiguity. For example, `SELECT table1.col1, table2.col1 FROM table1 JOIN table2 ON table1.id = table2.id`.
     7. Avoid using constructs not supported by PostgreSQL, such as `CROSS APPLY`.
     8. Handle null values and ensure to include conditions that maintain data integrity in filters.
     9. Ensure that aggregation functions (e.g., `COUNT`, `SUM`, `AVG`) are used with `GROUP BY` clauses when necessary.
     10. The syntax for the random function in PostgreSQL is: `random()`. 
+    11. For geospatial distance calculations, ONLY use the Haversine formula with standard SQL functions such as `COS`, `SIN`, `RADIANS`, and `ACOS`.
+    12. When calculating distances, use 6371 as the Earth's radius in kilometers.
+    13. Calculate the distance directly in the SQL query using the Haversine formula. Do not use external libraries or functions.
+    
+    Haversine Formula:
+        6371 * ACOS(
+        COS(RADIANS(1.3521)) * COS(RADIANS(latitude_column)) * COS(RADIANS(longitude_column) - RADIANS(103.8198)) +
+        SIN(RADIANS(1.3521)) * SIN(RADIANS(latitude_column))
 
+    <SCHEMA>{schema}</SCHEMA>
+
+    ### Input:
     Format:
     Write only the SQL query and nothing else.
     Do not wrap the SQL query in any other text, not even backticks.
     Do not reply to the user, and only respond with SQL queries.
 
     For example:
+
+    Question: Find all records from the bird_locations table where the bird's location is within an 8888 km radius of a specific home location (Latitude: 1.3521, Longitude: 103.8198).
+    SQL Query: SELECT * FROM bird_locations WHERE ( 6371 * ACOS( COS(RADIANS(1.3521)) * COS(RADIANS(latitude)) * COS(RADIANS(longitude) - RADIANS(103.8198)) + SIN(RADIANS(1.3521)) * SIN(RADIANS(latitude)) ) ) <= 8888;
 
     Question: Which 3 genres have the most tracks?
     SQL Query: SELECT g."Name" AS GenreName, COUNT(*) AS track_count FROM "Track" t JOIN "Genre" g ON t."GenreId" = g."GenreId" GROUP BY g."Name" ORDER BY track_count DESC LIMIT 3;
@@ -596,7 +471,7 @@ def get_sql_chain(db: SQLDatabase):
     SQL Query: SELECT al."Title" FROM "Album" al JOIN "Artist" a ON al."ArtistId" = a."ArtistId" WHERE a."Name" = 'AC/DC';
 
     Question: What are the 5 most recent invoices in UTC?
-    SQL Query: SELECT * FROM "Invoice" ORDER BY "InvoiceDate" AT TIME ZONE 'UTC' DESC LIMIT 5;
+    SQL Query: SELECT *, "InvoiceDate" AT TIME ZONE 'UTC' AS "InvoiceDate_UTC" FROM "Invoice" ORDER BY "InvoiceDate_UTC" DESC LIMIT 5;
 
     Question: How many tracks are longer than 5 minutes?
     SQL Query: SELECT COUNT(*) FROM "Track" WHERE "Milliseconds" > 300000;

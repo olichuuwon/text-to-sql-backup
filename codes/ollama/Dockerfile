@@ -1,5 +1,5 @@
 # Use the Ollama base image
-FROM jieshilyn/ollama-patched:latest
+FROM ollama/ollama:latest
 
 # Set environment variables
 ENV OLLAMA_MODELS=/tmp/.ollama/models
@@ -14,7 +14,7 @@ RUN mkdir -p $OLLAMA_MODELS && \
     chmod -R g=u $OLLAMA_MODELS
 
 # Pre-Install model
-RUN ollama serve & sleep 5 && ollama run llama3:instruct
+RUN ollama serve & sleep 5 && ollama run llama3:instruct && ollama run sqlcoder
 
 # Ensure the /.ollama directory exists and copy id_ed25519 file
 RUN mkdir -p /.ollama && \
